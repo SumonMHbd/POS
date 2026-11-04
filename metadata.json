@@ -1,6 +1,6 @@
 {
-  "name": "MHS POS — Smart Retail & Google Sheets Inventory",
-  "description": "Bilingual (Bangla & English) Point-of-Sale, inventory management, drag-and-drop analytics, e-commerce order sync, and offline-capable retail dashboard powered directly by Google Sheets.",
+  "name": "MHS POS — Smart Retail & Inventory",
+  "description": "MHS POS is a Point-of-Sale, inventory management, drag-and-drop analytics, e-commerce order sync, and offline-capable retail dashboard.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
