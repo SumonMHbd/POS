@@ -56,7 +56,13 @@ export function useRealtimeSync(params: {
   };
 
   useEffect(() => {
-    if (!params.isOnline || !params.authToken) {
+    const customApiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim();
+    const isStaticGithubPages =
+      typeof window !== 'undefined' &&
+      window.location.hostname.endsWith('.github.io') &&
+      !customApiBase;
+
+    if (!params.isOnline || !params.authToken || isStaticGithubPages) {
       setWsConnected(false);
       return;
     }
@@ -67,8 +73,13 @@ export function useRealtimeSync(params: {
 
     const connect = () => {
       if (cancelled) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      let wsUrl = '';
+      if (customApiBase) {
+        wsUrl = `${customApiBase.replace(/^http/i, 'ws').replace(/\/+$/, '')}/ws`;
+      } else {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}/ws`;
+      }
       let socket: WebSocket;
       try {
         socket = new WebSocket(wsUrl);

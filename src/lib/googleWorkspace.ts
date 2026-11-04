@@ -11,6 +11,7 @@ import type {
   SuperAdminOverviewResponse,
   UserRole,
 } from '../types/pos';
+import { handleStaticHostApiRequest } from './staticHostFallback';
 
 // Ready-to-deploy 100% Free Google Apps Script Bridge (Zero Sign-in Button, Zero Third-Party Cost!)
 // Stores all Super Admin, Shop Owner & Staff Login/Password records in your Master Google Sheet
@@ -194,18 +195,50 @@ export function saveAuthSession(session: AuthSessionUser | null): void {
 }
 
 async function apiFetch<T>(url: string, token: string | null, init?: RequestInit): Promise<T> {
+  const customApiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
+  const isStaticGithubPages =
+    typeof window !== 'undefined' &&
+    window.location.hostname.endsWith('.github.io') &&
+    !customApiBase;
+
+  if (isStaticGithubPages || (token && token.startsWith('static.') && !customApiBase)) {
+    return handleStaticHostApiRequest<T>(url, token, init);
+  }
+
+  const resolvedUrl = customApiBase && url.startsWith('/') ? `${customApiBase}${url}` : url;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      ...headers,
-      ...((init?.headers as Record<string, string>) || {}),
-    },
-  });
-  const data = await res.json().catch(() => ({}));
+
+  let res: Response;
+  try {
+    res = await fetch(resolvedUrl, {
+      ...init,
+      headers: {
+        ...headers,
+        ...((init?.headers as Record<string, string>) || {}),
+      },
+    });
+  } catch (err) {
+    if (!customApiBase && url.startsWith('/api/')) {
+      return handleStaticHostApiRequest<T>(url, token, init);
+    }
+    throw err;
+  }
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  const isJson = contentType.includes('application/json');
+
+  // If hosted on a static file server (GitHub Pages, Netlify, Cloudflare Pages, etc.)
+  // where /api/* returns an HTML 404/405 fallback instead of JSON, seamlessly use static mode
+  if (!isJson && (res.status === 404 || res.status === 405 || res.ok) && url.startsWith('/api/')) {
+    return handleStaticHostApiRequest<T>(url, token, init);
+  }
+
+  const data = isJson ? await res.json().catch(() => ({})) : {};
   if (!res.ok) {
     if (res.status === 401 && token && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mhs-auth-expired'));

@@ -4,8 +4,13 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const isBuild = command === 'build';
+  const basePath = isBuild ? './' : '/';
+  const assetPrefix = isBuild ? '' : '/';
+
   return {
+    base: basePath,
     plugins: [
       react(),
       tailwindcss(),
@@ -21,30 +26,30 @@ export default defineConfig(() => {
           'fonts/solaimanlipi-bold.woff2',
         ],
         manifest: {
-          id: '/',
+          id: basePath,
           name: 'MHS POS — Smart Retail & Inventory',
           short_name: 'MHS POS',
           description: 'Bilingual Point-of-Sale, inventory management, and analytics powered by Google Sheets with offline support.',
           theme_color: '#0F172A',
           background_color: '#0F172A',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: basePath,
+          scope: basePath,
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: `${assetPrefix}pwa-192x192.png`,
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: `${assetPrefix}pwa-512x512.png`,
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: `${assetPrefix}pwa-maskable-512x512.png`,
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
@@ -54,7 +59,7 @@ export default defineConfig(() => {
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,csv}'],
-          navigateFallback: '/index.html',
+          navigateFallback: `${assetPrefix}index.html`,
           navigateFallbackDenylist: [/^\/api\//, /^\/ws/],
           runtimeCaching: [
             {
