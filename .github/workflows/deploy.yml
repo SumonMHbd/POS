@@ -29,7 +29,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Build production static bundle
         run: npm run build
@@ -40,25 +40,33 @@ jobs:
           touch dist/.nojekyll
 
       - name: Publish built bundle to gh-pages branch
+        continue-on-error: true
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           force_orphan: true
 
-      - name: Configure GitHub Pages (Actions mode)
-        id: pages_config
-        continue-on-error: true
-        uses: actions/configure-pages@v5
-
       - name: Upload GitHub Pages artifact
-        if: steps.pages_config.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
 
-      - name: Deploy to GitHub Pages (Actions mode)
-        if: steps.pages_config.outcome == 'success'
+  deploy-pages:
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        id: pages_config
         continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Deploy to GitHub Pages
+        if: steps.pages_config.outcome == 'success'
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4

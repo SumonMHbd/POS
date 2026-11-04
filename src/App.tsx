@@ -1182,7 +1182,7 @@ export default function App() {
     setIsHydratingWorkspace(true);
     try {
       const csvText =
-        customCsv || (await (await fetch('/assets/aistudio/Shop_POS_95f8e56e')).text());
+        customCsv || (await (await fetch('./assets/aistudio/Shop_POS_95f8e56e')).text());
       const parsed = parseUploadedSummaryCsv(csvText);
       const defaults = buildDefaultPosStore();
       const nextState: PosStoreState = {
