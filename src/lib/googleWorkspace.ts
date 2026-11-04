@@ -223,7 +223,9 @@ async function apiFetch<T>(url: string, token: string | null, init?: RequestInit
       },
     });
   } catch (err) {
-    if (!customApiBase && url.startsWith('/api/')) {
+    const onGithubPages =
+      typeof window !== 'undefined' && window.location.hostname.endsWith('.github.io');
+    if ((!customApiBase || onGithubPages) && url.startsWith('/api/')) {
       return handleStaticHostApiRequest<T>(url, token, init);
     }
     throw err;

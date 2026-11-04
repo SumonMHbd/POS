@@ -32,7 +32,7 @@ import {
   buildFreshShopStore,
   ensureCustomerCreditHistory,
   getDefaultPermissionsForRole,
-} from './src/data/initialShopData.ts';
+} from './src/lib/storeDefaults.ts';
 
 dotenv.config();
 
@@ -1165,8 +1165,21 @@ async function startServer() {
       "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self';"
     );
     if (req.path.startsWith('/api/')) {
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+      } else {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
+      if (req.method === 'OPTIONS') {
+        res.status(204).end();
+        return;
+      }
     }
     next();
   });

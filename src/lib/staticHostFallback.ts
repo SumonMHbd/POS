@@ -21,7 +21,7 @@ import {
   buildFreshShopStore,
   ensureCustomerCreditHistory,
   getDefaultPermissionsForRole,
-} from '../data/initialShopData';
+} from './storeDefaults';
 
 const STATIC_DB_STORAGE_KEY = 'mhs_pos_static_platform_db_v2';
 

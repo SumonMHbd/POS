@@ -23,7 +23,7 @@ import {
   type SeasonalMonthDatum,
   type StaffDashboardPermissions,
 } from '../types/pos';
-import { ensureCustomerCreditHistory } from '../data/initialShopData';
+import { ensureCustomerCreditHistory } from '../lib/storeDefaults';
 import { formatBDT, formatPct, UI_TEXT } from '../i18n/translations';
 import {
   exportCreditsCsv,

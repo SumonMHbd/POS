@@ -19,7 +19,7 @@ import {
   type StaffMember,
   type WorkspaceTab,
 } from '../types/pos';
-import { getDefaultPermissionsForRole } from '../data/initialShopData';
+import { getDefaultPermissionsForRole } from '../lib/storeDefaults';
 import {
   exportCreditsCsv,
   exportExpensesCsv,

@@ -41,7 +41,7 @@ import {
   ensureCustomerCreditHistory,
   getDefaultPermissionsForRole,
   parseUploadedSummaryCsv,
-} from './data/initialShopData';
+} from './lib/storeDefaults';
 import { formatBDT, UI_TEXT } from './i18n/translations';
 import {
   clearCachedStoreSnapshots,
