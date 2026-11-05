@@ -136,49 +136,61 @@ async function makeUserRecord(params: {
 async function createSeededStaticDb(): Promise<StaticPlatformDatabase> {
   const flagshipPos = buildDefaultPosStore();
   const users: StaticUserAccount[] = [
-    await makeUserRecord({
+    {
       id: 'user-superadmin-1',
       name: 'MHS Super Admin',
       email: 'mhsumon670@gmail.com',
-      password: ['admin', '1234'].join(''),
+      passwordSalt: 'salt-mhs-superadmin',
+      passwordDigest: '61a5e4c472ad09f1f00e065d0316cd783b76f7c312bf6cab745bdd25717d992c',
+      vaultSecretEncoded: '',
       role: UserRole.SUPER_ADMIN,
       shopId: null,
       phone: '01700-000000',
+      active: true,
       createdAt: '2026-01-01T00:00:00Z',
-    }),
-    await makeUserRecord({
+    },
+    {
       id: 'staff-1',
       name: 'Md. Sumon (Shop Owner)',
       email: 'owner@electronics.bd',
-      password: ['123', '456'].join(''),
+      passwordSalt: 'salt-mhs-owner',
+      passwordDigest: '12b4178967abd73a7b9b3e4b3912fd054b84c0e9eda837737540b5259a2d4c0c',
+      vaultSecretEncoded: '',
       role: UserRole.OWNER,
       shopId: flagshipPos.shopId,
       phone: '01700-000001',
+      active: true,
       permissions: getDefaultPermissionsForRole(UserRole.OWNER),
       createdAt: '2026-01-01T09:00:00Z',
-    }),
-    await makeUserRecord({
+    },
+    {
       id: 'staff-2',
       name: 'Rina Begum (Manager)',
       email: 'manager@electronics.bd',
-      password: ['123', '456'].join(''),
+      passwordSalt: 'salt-mhs-manager',
+      passwordDigest: '9df6f7704f74c8583fa1ced3734a1f34c18b3778275ac49d565dbbb4b90c6610',
+      vaultSecretEncoded: '',
       role: UserRole.MANAGER,
       shopId: flagshipPos.shopId,
       phone: '01700-000002',
+      active: true,
       permissions: getDefaultPermissionsForRole(UserRole.MANAGER),
       createdAt: '2026-02-15T09:00:00Z',
-    }),
-    await makeUserRecord({
+    },
+    {
       id: 'staff-3',
       name: 'Tanvir Hasan (Cashier)',
       email: 'cashier@electronics.bd',
-      password: ['123', '456'].join(''),
+      passwordSalt: 'salt-mhs-cashier',
+      passwordDigest: '01e2af3a6b8c8b1349552f8f3b1d0bbde8a337907e72e43ad407023bf30afd33',
+      vaultSecretEncoded: '',
       role: UserRole.CASHIER,
       shopId: flagshipPos.shopId,
       phone: '01800-000003',
+      active: true,
       permissions: getDefaultPermissionsForRole(UserRole.CASHIER),
       createdAt: '2026-04-10T09:00:00Z',
-    }),
+    },
   ];
 
   const shops: Record<string, StaticShopRecord> = {

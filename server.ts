@@ -1154,28 +1154,113 @@ async function startServer() {
   app.disable('x-powered-by');
   const server = http.createServer(app);
 
-  // HTTP Security Headers & Strict API No-Cache Policy
+  // Trusted origins validator (permits same-origin, GitHub Pages, Google Cloud / AI Studio, and localhost)
+  const isAllowedOrigin = (origin?: string): boolean => {
+    if (!origin) return true;
+    try {
+      const parsed = new URL(origin);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host.endsWith('.github.io') ||
+        host.endsWith('.run.app') ||
+        host.endsWith('.google.com') ||
+        host.endsWith('.googleusercontent.com')
+      ) {
+        return true;
+      }
+      const customAllowed = (process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      return customAllowed.includes(host) || customAllowed.includes(origin.toLowerCase());
+    } catch {
+      return false;
+    }
+  };
+
+  // Automated vulnerability scanner / honeypot pattern detector
+  const SCANNER_REGEX =
+    /(\.env|\.git|\.aws|\.ssh|\.bak|wp-login|wp-admin|phpmyadmin|xmlrpc|cgi-bin|swagger|api-docs|\.well-known\/traffic-advice|server\.(ts|js)|package\.json)/i;
+
+  const ipBlocklist = new Map<string, number>();
+  const apiRateBuckets = new Map<string, { count: number; resetAt: number }>();
+  const loginFailBuckets = new Map<
+    string,
+    { fails: number; blockedUntil: number; lastAttemptAt: number }
+  >();
+
+  const getClientIp = (req: Request): string => {
+    const xff = req.headers['x-forwarded-for'];
+    const raw = Array.isArray(xff)
+      ? xff[0]
+      : typeof xff === 'string'
+      ? xff.split(',')[0]
+      : req.socket.remoteAddress || 'unknown';
+    return String(raw).trim().slice(0, 64);
+  };
+
+  // HTTP Security Headers, Anti-Scraping, Origin Shielding & API Cloaking
   app.use((req: Request, res: Response, next: NextFunction) => {
+    const ip = getClientIp(req);
+    const now = Date.now();
+
+    // Check if IP is in the honeypot ban list
+    const bannedUntil = ipBlocklist.get(ip);
+    if (bannedUntil && bannedUntil > now) {
+      res.status(403).end();
+      return;
+    }
+
+    // Intercept automated probe / exploit scanning attempts and ban the IP
+    if (SCANNER_REGEX.test(req.path) || SCANNER_REGEX.test(req.url)) {
+      ipBlocklist.set(ip, now + 60 * 60 * 1000); // 1-hour ban
+      res.status(404).end();
+      return;
+    }
+
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=()'
+    );
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self';"
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https:; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'self' https://*.run.app https://*.google.com https://*.googleusercontent.com; object-src 'none'; base-uri 'self';"
     );
+
     if (req.path.startsWith('/api/')) {
+      // Cloak APIs from search engines, scrapers, and archive bots
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+
       const origin = req.headers.origin;
       if (origin) {
+        if (!isAllowedOrigin(origin)) {
+          res.status(403).json({ error: 'Access denied: unauthorized origin.' });
+          return;
+        }
         res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Vary', 'Origin');
       } else {
         res.setHeader('Access-Control-Allow-Origin', '*');
       }
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-      res.setHeader('Pragma', 'no-cache');
+
+      res.setHeader(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, DELETE, OPTIONS'
+      );
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-Shopify-Hmac-Sha256, X-Wc-Webhook-Signature'
+      );
+
       if (req.method === 'OPTIONS') {
         res.status(204).end();
         return;
@@ -1186,16 +1271,7 @@ async function startServer() {
 
   app.use(express.json({ limit: '4mb' }));
 
-  // Sliding-Window API & Login Brute-Force Rate Limiters
-  const apiRateBuckets = new Map<string, { count: number; resetAt: number }>();
-  const loginFailBuckets = new Map<string, { fails: number; blockedUntil: number; lastAttemptAt: number }>();
-
-  const getClientIp = (req: Request): string => {
-    const xff = req.headers['x-forwarded-for'];
-    const raw = Array.isArray(xff) ? xff[0] : typeof xff === 'string' ? xff.split(',')[0] : req.socket.remoteAddress || 'unknown';
-    return String(raw).trim().slice(0, 64);
-  };
-
+  // Sliding-Window API Rate Limiter
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
     const ip = getClientIp(req);
     const now = Date.now();
@@ -1210,8 +1286,11 @@ async function startServer() {
       return;
     }
     bucket.count += 1;
-    if (bucket.count > 300) {
-      res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+    // Lower threshold for public scanning protection
+    if (bucket.count > 120) {
+      res
+        .status(429)
+        .json({ error: 'Too many requests. Please wait a moment and try again.' });
       return;
     }
     next();
@@ -3203,6 +3282,14 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Zero-information-leakage error cloaking: Never expose stack traces or internal filenames
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+    res.status(status).json({
+      error: status === 400 ? 'Invalid request format.' : 'Request could not be processed securely.',
+    });
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`MHS POS Multi-Tenant SaaS Server & WebSocket Hub listening on http://0.0.0.0:${PORT}`);

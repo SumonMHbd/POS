@@ -24,6 +24,8 @@ export default defineConfig(({ command }) => {
           'pwa-maskable-512x512.png',
           'fonts/solaimanlipi-normal.woff2',
           'fonts/solaimanlipi-bold.woff2',
+          'robots.txt',
+          'sitemap.xml',
         ],
         manifest: {
           id: basePath,
@@ -102,6 +104,25 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    esbuild: isBuild
+      ? {
+          drop: ['console', 'debugger'],
+          legalComments: 'none',
+        }
+      : false,
+    build: {
+      sourcemap: false,
+      minify: 'esbuild',
+      target: 'es2022',
+      cssMinify: true,
+      rollupOptions: {
+        output: {
+          entryFileNames: 'assets/[hash].js',
+          chunkFileNames: 'assets/[hash].js',
+          assetFileNames: 'assets/[hash].[ext]',
+        },
       },
     },
     server: {

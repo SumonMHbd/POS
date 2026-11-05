@@ -3,6 +3,14 @@ import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
+import { initAppSecurityShield } from './lib/appSecurity';
+
+// Activate anti-duplication, anti-theft & source protection shield
+try {
+  initAppSecurityShield();
+} catch {
+  // Graceful fallback
+}
 
 try {
   registerSW({
