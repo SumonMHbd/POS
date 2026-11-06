@@ -4,6 +4,7 @@ import {
   type CustomerCredit,
   type PosStoreState,
   type SeasonalMonthDatum,
+  type ShopReceiptPaperFormat,
   type StaffDashboardPermissions,
   type WorkspaceTab,
 } from '../types/pos';
@@ -154,6 +155,7 @@ export interface FreshShopStoreParams {
   spreadsheetTitle?: string;
   spreadsheetUrl?: string;
   provisioningStatus?: 'connected' | 'pending_bridge' | 'unlinked';
+  receiptFormat?: ShopReceiptPaperFormat;
 }
 
 export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState {
@@ -169,6 +171,7 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
     businessType: params.businessType || 'General Retail',
     address: params.address || '',
     phone: params.phone || '',
+    receiptFormat: params.receiptFormat || 'pos_thermal',
     categories: DEFAULT_SHOP_CATEGORIES.map((c) => ({ ...c })),
     selectedYear: year,
     selectedMonthKey: monthKey,
@@ -281,6 +284,7 @@ export function buildDefaultPosStore(): PosStoreState {
       wooConsumerSecret: '',
       autoDeductStock: true,
     },
+    receiptFormat: 'pos_thermal',
   };
 }
 

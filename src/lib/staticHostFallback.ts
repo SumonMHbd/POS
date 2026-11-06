@@ -675,6 +675,7 @@ export async function handleStaticHostApiRequest<T>(
         ? `https://docs.google.com/spreadsheets/d/${customSheetId}/edit`
         : '',
       provisioningStatus: customSheetId ? 'connected' : 'pending_bridge',
+      receiptFormat: body.receiptFormat === 'a4_invoice' ? 'a4_invoice' : 'pos_thermal',
     });
 
     const ownerUser = await makeUserRecord({

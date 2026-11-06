@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Banknote,
+  Barcode,
   Check,
   CheckCircle2,
   ChevronDown,
   CreditCard,
+  Lock,
   Minus,
   PackagePlus,
   Plus,
@@ -12,6 +14,7 @@ import {
   Search,
   ShoppingCart,
   Smartphone,
+  Sparkles,
   Trash2,
   UserPlus,
   Wallet,
@@ -26,6 +29,8 @@ import {
   type SaleLineItem,
   type SaleTransaction,
   type ShopCategoryItem,
+  type ShopFeatureEntitlements,
+  type ShopSubscriptionPlan,
 } from '../types/pos';
 import {
   DEFAULT_SHOP_CATEGORIES,
@@ -34,6 +39,7 @@ import {
   UI_TEXT,
 } from '../i18n/translations';
 import { AppPopupModal } from './AppPopupModal';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
 
 interface PosTerminalProps {
   products: Product[];
@@ -46,6 +52,8 @@ interface PosTerminalProps {
     newCreditCustomer?: { name: string; phone: string }
   ) => void;
   onGoToInventory?: () => void;
+  shopPlan?: ShopSubscriptionPlan;
+  entitlements?: ShopFeatureEntitlements;
 }
 
 export const PosTerminal: React.FC<PosTerminalProps> = ({
@@ -56,6 +64,8 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   cashierName,
   onCompleteSale,
   onGoToInventory,
+  shopPlan = 'Starter',
+  entitlements,
 }) => {
   const t = UI_TEXT[lang];
   const activeCategories = categories.length > 0 ? categories : DEFAULT_SHOP_CATEGORIES;
@@ -74,6 +84,23 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(false);
   const paymentDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Enterprise Subscription Gate for Barcode Scanner
+  const isEnterprise = shopPlan === 'Enterprise' || Boolean(entitlements?.enableBarcodeScanner);
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
+  const [showEnterpriseUpgradeHint, setShowEnterpriseUpgradeHint] = useState(false);
+
+  const handleOpenBarcodeScanner = () => {
+    if (isEnterprise) {
+      setBarcodeModalOpen(true);
+    } else {
+      setShowEnterpriseUpgradeHint(true);
+    }
+  };
+
+  const handleBarcodeItemScanned = (product: Product) => {
+    addToCart(product);
+  };
 
   useEffect(() => {
     if (!paymentMenuOpen) return;
@@ -629,16 +656,53 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
       {/* Left 8 Cols: Search, Category Bar & Touch Product Grid */}
       <div className="lg:col-span-8 space-y-4">
         <div className="neu-box-static rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-          <div className="relative">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder={t.searchProducts}
-              className="w-full min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-emerald-600 focus:outline-none"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={t.searchProducts}
+                className="w-full min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-emerald-600 focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenBarcodeScanner}
+              title={
+                isEnterprise
+                  ? lang === 'bn'
+                    ? 'ক্যামেরা দিয়ে বারকোড স্ক্যান করুন (Enterprise)'
+                    : 'Scan Barcode with Camera (Enterprise)'
+                  : lang === 'bn'
+                  ? 'বারকোড স্ক্যানার শুধুমাত্র Enterprise প্ল্যানে উপলব্ধ'
+                  : 'Barcode Scanner is available on the Enterprise Plan'
+              }
+              className={`min-h-[44px] px-3 sm:px-4 rounded-xl flex items-center gap-2 font-bold text-xs sm:text-sm whitespace-nowrap transition-all shrink-0 border ${
+                isEnterprise
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+              }`}
+            >
+              <Barcode className="h-4 w-4 shrink-0 text-current" />
+              <span className="hidden sm:inline">
+                {lang === 'bn' ? 'বারকোড স্ক্যান' : 'Scan Barcode'}
+              </span>
+              <span className="sm:hidden">{lang === 'bn' ? 'স্ক্যান' : 'Scan'}</span>
+              {!isEnterprise ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
+                  <Lock className="w-2.5 h-2.5" />
+                  Ent
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/20 text-emerald-100 border border-emerald-400/30">
+                  Live
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5">
@@ -799,6 +863,62 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
         ariaLabel={lang === 'bn' ? 'ক্যাশ মেমো / বিল' : 'Counter Bill'}
       >
         {renderCartContent(true)}
+      </AppPopupModal>
+
+      {/* Camera Barcode Scanner Modal (Enterprise Feature) */}
+      <BarcodeScannerModal
+        isOpen={barcodeModalOpen}
+        onClose={() => setBarcodeModalOpen(false)}
+        products={products}
+        onItemScanned={handleBarcodeItemScanned}
+        isBangla={lang === 'bn'}
+      />
+
+      {/* Enterprise Upgrade Hint Popup */}
+      <AppPopupModal
+        isOpen={showEnterpriseUpgradeHint}
+        onClose={() => setShowEnterpriseUpgradeHint(false)}
+        maxWidthClass="max-w-md"
+        heightMode="compact"
+        ariaLabel={lang === 'bn' ? 'Enterprise ফিচার' : 'Enterprise Feature'}
+      >
+        <div className="p-5 sm:p-6 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mx-auto">
+            <Lock className="w-6 h-6" />
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {lang === 'bn'
+                ? 'বারকোড স্ক্যানার — Enterprise প্ল্যান ফিচার'
+                : 'Barcode Scanner — Enterprise Plan Feature'}
+            </h3>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {lang === 'bn'
+                ? 'ক্যামেরা দিয়ে সরাসরি বারকোড স্ক্যান করে দ্রুত ক্যাশ মেমো তৈরির ফিচারটি শুধুমাত্র Enterprise সাবস্ক্রিপশন প্ল্যানে উপলব্ধ। Super Admin ড্যাশবোর্ড থেকে এই দোকানের প্ল্যান Enterprise এ পরিবর্তন করুন।'
+                : 'Camera-based real-time barcode scanning is an Enterprise subscription tier feature. Please assign or upgrade this shop to the Enterprise Plan from the Super Admin Dashboard to unlock camera scanning.'}
+            </p>
+          </div>
+
+          <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-left space-y-1">
+            <div className="flex items-center justify-between text-slate-500">
+              <span>{lang === 'bn' ? 'বর্তমান প্ল্যান:' : 'Current Plan:'}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{shopPlan}</span>
+            </div>
+            <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-semibold">
+              <span>{lang === 'bn' ? 'প্রয়োজনীয় প্ল্যান:' : 'Required Plan:'}</span>
+              <span>Enterprise</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowEnterpriseUpgradeHint(false)}
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-colors"
+          >
+            {lang === 'bn' ? 'ঠিক আছে / বন্ধ করুন' : 'Got it / Close'}
+          </button>
+        </div>
       </AppPopupModal>
     </div>
   );

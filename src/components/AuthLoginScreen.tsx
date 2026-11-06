@@ -128,8 +128,8 @@ export const AuthLoginScreen: React.FC<AuthLoginScreenProps> = ({
       title: lang === 'bn' ? 'লাভ-ক্ষতি ও বাকির খাতা সিঙ্ক' : 'Profit Analytics & Cloud Sync',
       desc:
         lang === 'bn'
-          ? 'মাসিক নিট লাভ, খরচের হিসাব, ক্রেতার বাকির খাতা এবং গুগল শিট ক্লাউড ব্যাকআপ।'
-          : 'Track monthly net profit, customer dues, staff roles, and live Google Sheets sync.',
+          ? 'মাসিক নিট লাভ, খরচের হিসাব, ক্রেতার বাকির খাতা এবং সার্বক্ষণিক ক্লাউড ব্যাকআপ।'
+          : 'Track monthly net profit, customer dues, staff roles, and live Cloud sync.',
     },
   ];
 

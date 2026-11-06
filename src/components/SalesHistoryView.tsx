@@ -245,8 +245,8 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
             </h2>
             <p className="text-[11px] sm:text-xs leading-snug text-slate-500 mt-0.5">
               {lang === 'bn'
-                ? 'সকল বিক্রির তথ্য তারিখ অনুযায়ী (পুরাতন থেকে নতুন) সাজানো এবং গুগল শিটের "Sales History" ট্যাবে স্বয়ংক্রিয়ভাবে সংরক্ষিত'
-                : 'Ordered by date ascending with full product, category, payment, discount, customer & due bill details — synced to Google Sheet "Sales History" tab'}
+                ? 'সকল বিক্রির তথ্য তারিখ অনুযায়ী (পুরাতন থেকে নতুন) সাজানো এবং ক্লাউড ডাটাবেসে স্বয়ংক্রিয়ভাবে সংরক্ষিত'
+                : 'Ordered by date ascending with full product, category, payment, discount, customer & due bill details — synced to secure cloud storage'}
             </p>
           </div>
 

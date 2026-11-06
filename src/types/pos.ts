@@ -244,6 +244,8 @@ export interface EcommerceCredentials {
   autoDeductStock: boolean;
 }
 
+export type ShopReceiptPaperFormat = 'pos_thermal' | 'a4_invoice';
+
 export interface PosStoreState {
   shopId: string;
   shopNameBn: string;
@@ -264,6 +266,7 @@ export interface PosStoreState {
   seasonalHistory: SeasonalMonthDatum[];
   sheetConfig: SheetConnectionConfig;
   ecommerceCredentials: EcommerceCredentials;
+  receiptFormat?: ShopReceiptPaperFormat;
 }
 
 export type ShopSubscriptionPlan = 'Starter' | 'Business' | 'Enterprise' | 'Custom';
@@ -274,6 +277,7 @@ export interface ShopFeatureEntitlements {
   enableEcommerce: boolean;
   enableCreditLedger: boolean;
   enableAuditExports: boolean;
+  enableBarcodeScanner?: boolean;
   maxStaffAccounts: number;
 }
 
@@ -334,6 +338,7 @@ export interface ShopTenantSummary {
   billingStatus: SubscriptionPaymentStatus;
   nextBillingDate: string;
   createdAt: string;
+  receiptFormat?: ShopReceiptPaperFormat;
   entitlements: ShopFeatureEntitlements;
   sheetConfig: SheetConnectionConfig;
   metrics: {

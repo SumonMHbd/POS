@@ -61,13 +61,13 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       onUpdateSheetConfig(res.sheetConfig);
       onNotify(
         lang === 'bn'
-          ? `দোকানের নামে নতুন গুগল শিট তৈরি ও সংযুক্ত হয়েছে: ${res.sheetConfig.spreadsheetTitle}`
-          : `Auto-created and linked Google Sheet: ${res.sheetConfig.spreadsheetTitle}`
+          ? `দোকানের নামে নতুন ক্লাউড ডাটাবেস তৈরি ও সংযুক্ত হয়েছে: ${res.sheetConfig.spreadsheetTitle}`
+          : `Auto-created and linked Cloud Database: ${res.sheetConfig.spreadsheetTitle}`
       );
     } catch (err: unknown) {
       setShowScriptGuide(true);
       onNotify(
-        err instanceof Error ? err.message : 'Paste Apps Script Web App URL or Google Sheet URL below.',
+        err instanceof Error ? err.message : 'Paste Cloud Storage Bridge URL or Database URL below.',
         true
       );
     } finally {
@@ -78,7 +78,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   const handleLinkDirectUrl = async () => {
     if (!existingUrlInput.trim()) {
       onNotify(
-        lang === 'bn' ? 'সঠিক গুগল শিট লিংক বা আইডি দিন' : 'Please enter a Google Sheet URL or ID',
+        lang === 'bn' ? 'সঠিক ক্লাউড ডাটাবেস লিংক বা আইডি দিন' : 'Please enter a Cloud Storage URL or ID',
         true
       );
       return;
@@ -93,11 +93,11 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       onUpdateSheetConfig(res.sheetConfig);
       onNotify(
         lang === 'bn'
-          ? `গুগল শিট ডাটাবেস সরাসরি সংযুক্ত হয়েছে: ${res.sheetConfig.spreadsheetTitle}`
-          : `Connected Google Sheet database: ${res.sheetConfig.spreadsheetTitle}`
+          ? `ক্লাউড ডাটাবেস সরাসরি সংযুক্ত হয়েছে: ${res.sheetConfig.spreadsheetTitle}`
+          : `Connected Cloud database: ${res.sheetConfig.spreadsheetTitle}`
       );
     } catch (err: unknown) {
-      onNotify(err instanceof Error ? err.message : 'Unable to connect Google Sheet', true);
+      onNotify(err instanceof Error ? err.message : 'Unable to connect Cloud Database', true);
     } finally {
       setBusyMode(null);
     }
@@ -111,8 +111,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       onUpdateSheetConfig(res.posState.sheetConfig, res.posState);
       onNotify(
         lang === 'bn'
-          ? 'গুগল শিট থেকে সর্বশেষ পণ্য ও হিসাব লোড হয়েছে।'
-          : 'Pulled latest inventory and POS records from Google Sheets.'
+          ? 'ক্লাউড ডাটাবেস থেকে সর্বশেষ পণ্য ও হিসাব লোড হয়েছে।'
+          : 'Pulled latest inventory and POS records from Cloud Storage.'
       );
     } catch (err: unknown) {
       onNotify(err instanceof Error ? err.message : 'Pull failed', true);
@@ -130,8 +130,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       heightMode="screen"
       ariaLabel={
         lang === 'bn'
-          ? 'সরাসরি Google Sheets ডাটাবেস সংযোগ'
-          : 'Direct Google Sheets Database Connection'
+          ? 'সরাসরি ক্লাউড ডাটাবেস ও স্টোরেজ সিঙ্ক'
+          : 'Cloud Database & Storage Sync'
       }
     >
       <div className="shrink-0 px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/95 flex items-center justify-between gap-2.5">
@@ -142,13 +142,13 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           <div className="min-w-0">
             <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
               {lang === 'bn'
-                ? 'সরাসরি Google Sheets ডাটাবেস সংযোগ'
-                : 'Direct Google Sheets Database Connection'}
+                ? 'সরাসরি ক্লাউড ডাটাবেস ও স্টোরেজ সিঙ্ক'
+                : 'Cloud Database & Storage Sync'}
             </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
               {lang === 'bn'
-                ? `${state.shopNameBn} — সরাসরি গুগল শিট ক্লাউড সিঙ্ক`
-                : `${state.shopNameEn} — Direct cloud database sync`}
+                ? `${state.shopNameBn} — সরাসরি ক্লাউড ডাটাবেস ব্যাকআপ ও সিঙ্ক`
+                : `${state.shopNameEn} — Direct cloud database sync & backup`}
             </p>
           </div>
         </div>
@@ -229,18 +229,18 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
 
         {/* Two Direct Connection Options */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {/* Option 1: Auto-create Google Sheet with Shop Name */}
+          {/* Option 1: Auto-create Cloud Database with Shop Name */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 flex flex-col justify-between space-y-3">
             <div className="space-y-2">
               <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                 {lang === 'bn'
-                  ? '১. দোকানের নামে অটো শিট তৈরি'
-                  : '1. Auto-Create Sheet With Shop Name'}
+                  ? '১. দোকানের নামে অটো ক্লাউড ডাটাবেস তৈরি'
+                  : '1. Auto-Create Cloud DB With Shop Name'}
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-snug">
                 {lang === 'bn'
-                  ? `"${state.shopNameBn} — MHS POS" নামে ৯-ট্যাব বিশিষ্ট নতুন গুগল শিট স্বয়ংক্রিয়ভাবে তৈরি করবে।`
-                  : `Creates "${state.shopNameEn} — MHS POS" with structured POS tabs in Google Drive.`}
+                  ? `"${state.shopNameBn} — MHS POS" নামে ৯-ট্যাব বিশিষ্ট নতুন ক্লাউড ডাটাবেস স্বয়ংক্রিয়ভাবে তৈরি করবে।`
+                  : `Creates "${state.shopNameEn} — MHS POS" with structured POS tabs in Cloud.`}
               </p>
 
               <div>
@@ -277,33 +277,33 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 {busyMode === 'create'
                   ? 'Creating...'
                   : lang === 'bn'
-                  ? 'নতুন শিট তৈরি ও সংযুক্ত করুন'
-                  : 'Auto-Create & Connect Sheet'}
+                  ? 'নতুন ক্লাউড ডাটাবেস তৈরি ও সংযুক্ত করুন'
+                  : 'Auto-Create & Connect Cloud Database'}
               </span>
             </button>
           </div>
 
-          {/* Option 2: Paste Existing Google Sheet URL / ID */}
+          {/* Option 2: Paste Existing Cloud Storage URL / ID */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 flex flex-col justify-between space-y-3">
             <div className="space-y-2">
               <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                 {lang === 'bn'
-                  ? '২. সরাসরি গুগল শিট লিংক সংযুক্ত করুন'
-                  : '2. Connect Sheet URL / ID Directly'}
+                  ? '২. সরাসরি ক্লাউড ডাটাবেস লিংক সংযুক্ত করুন'
+                  : '2. Connect Cloud Database URL / ID Directly'}
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 leading-snug">
                 {lang === 'bn'
-                  ? 'যেকোনো Google Sheet লিংক বা Spreadsheet ID পেস্ট করে সরাসরি যুক্ত করুন।'
-                  : 'Paste any Google Sheet link or Spreadsheet ID directly to bind this shop.'}
+                  ? 'যেকোনো ক্লাউড ডাটাবেস লিংক বা Spreadsheet ID পেস্ট করে সরাসরি যুক্ত করুন।'
+                  : 'Paste any Cloud Storage link or Spreadsheet ID directly to bind this shop.'}
               </p>
 
               <div>
                 <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1 truncate">
-                  Google Sheet URL or ID
+                  {lang === 'bn' ? 'ক্লাউড ডাটাবেস লিংক বা আইডি' : 'Cloud Database URL or ID'}
                 </label>
                 <input
                   type="text"
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  placeholder="https://docs.google.com/spreadsheets/d/... or ID"
                   value={existingUrlInput}
                   onChange={(e) => setExistingUrlInput(e.target.value)}
                   className="w-full min-h-[38px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs font-mono"
@@ -322,8 +322,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                 {busyMode === 'link'
                   ? 'Linking...'
                   : lang === 'bn'
-                  ? 'সরাসরি শিট সংযুক্ত করুন'
-                  : 'Connect Sheet Directly'}
+                  ? 'সরাসরি ক্লাউড ডাটাবেস সংযুক্ত করুন'
+                  : 'Connect Cloud DB Directly'}
               </span>
             </button>
           </div>
@@ -333,12 +333,12 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
         {showScriptGuide && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs space-y-1.5 animate-dropdown-pop">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-bold truncate">Free Google Sheets Direct Bridge Script</span>
+              <span className="font-bold truncate">Free Direct Cloud Bridge Script</span>
               <button
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_BRIDGE_CODE);
-                  onNotify('Copied Google Apps Script to clipboard!');
+                  onNotify('Copied Cloud Bridge Script to clipboard!');
                 }}
                 className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white whitespace-nowrap shrink-0"
               >
@@ -365,8 +365,8 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
           />
           <span className="text-[11px] sm:text-xs leading-snug truncate">
             {lang === 'bn'
-              ? 'প্রতিটি বিক্রি ও স্টক পরিবর্তনের সাথে স্বয়ংক্রিয়ভাবে শিট আপডেট করুন'
-              : 'Auto-sync every POS checkout and inventory update to Google Sheets'}
+              ? 'প্রতিটি বিক্রি ও স্টক পরিবর্তনের সাথে স্বয়ংক্রিয়ভাবে ক্লাউড ডাটাবেস আপডেট করুন'
+              : 'Auto-sync every POS checkout and inventory update to Cloud Database'}
           </span>
         </label>
 

@@ -19,6 +19,7 @@ import {
   type Product,
   type ShopAccountStatus,
   type ShopFeatureEntitlements,
+  type ShopReceiptPaperFormat,
   type ShopSubscriptionPlan,
   type ShopTenantSummary,
   type StaffDashboardPermissions,
@@ -95,6 +96,7 @@ interface StoredShopRecord {
   billingStatus: SubscriptionPaymentStatus;
   nextBillingDate: string;
   createdAt: string;
+  receiptFormat?: ShopReceiptPaperFormat;
   entitlements: ShopFeatureEntitlements;
   posState: PosStoreState;
 }
@@ -881,6 +883,7 @@ function summarizeShopTenant(record: StoredShopRecord): ShopTenantSummary {
     billingStatus: record.billingStatus,
     nextBillingDate: record.nextBillingDate,
     createdAt: record.createdAt,
+    receiptFormat: record.receiptFormat || st.receiptFormat || 'pos_thermal',
     entitlements: record.entitlements,
     sheetConfig: st.sheetConfig,
     metrics: {
@@ -1583,6 +1586,7 @@ async function startServer() {
       globalAnnouncement: db.globalAnnouncement,
       shopState: shopRecord ? sanitizePosStateForUser(shopRecord.posState, user) : null,
       shopEntitlements: shopRecord ? shopRecord.entitlements : null,
+      shopPlan: shopRecord ? shopRecord.plan : null,
     });
   });
 
@@ -1605,6 +1609,7 @@ async function startServer() {
       globalAnnouncement: db.globalAnnouncement,
       shopState: shopRecord ? sanitizePosStateForUser(shopRecord.posState, user) : null,
       shopEntitlements: shopRecord ? shopRecord.entitlements : null,
+      shopPlan: shopRecord ? shopRecord.plan : null,
     });
   });
 
@@ -2014,6 +2019,9 @@ async function startServer() {
       provisioningStatus = 'connected';
     }
 
+    const chosenFormat: ShopReceiptPaperFormat =
+      req.body?.receiptFormat === 'a4_invoice' ? 'a4_invoice' : 'pos_thermal';
+
     const freshPosState = buildFreshShopStore({
       shopId,
       shopNameBn: cleanNameBn,
@@ -2021,6 +2029,7 @@ async function startServer() {
       businessType: String(businessType || 'General Retail'),
       address: String(address || ''),
       phone: String(phone || ''),
+      receiptFormat: chosenFormat,
       ownerId: ownerUserId,
       ownerName: String(ownerName || cleanNameEn + ' Owner'),
       ownerEmail: cleanEmail,
@@ -2104,6 +2113,7 @@ async function startServer() {
       billingStatus: initBillStatus,
       nextBillingDate: defaultNextDue,
       createdAt: nowIso,
+      receiptFormat: chosenFormat,
       entitlements: {
         enableEcommerce: entitlements?.enableEcommerce ?? true,
         enableCreditLedger: entitlements?.enableCreditLedger ?? true,
@@ -2211,6 +2221,10 @@ async function startServer() {
     }
     if (b.plan === 'Starter' || b.plan === 'Business' || b.plan === 'Enterprise' || b.plan === 'Custom') {
       record.plan = b.plan;
+      record.entitlements = {
+        ...record.entitlements,
+        enableBarcodeScanner: b.plan === 'Enterprise',
+      };
     }
     if (b.monthlySubscriptionFee !== undefined) {
       record.monthlySubscriptionFee = Math.max(0, Number(b.monthlySubscriptionFee) || 0);
@@ -2225,7 +2239,13 @@ async function startServer() {
       record.entitlements = {
         ...record.entitlements,
         ...b.entitlements,
+        enableBarcodeScanner:
+          record.plan === 'Enterprise' ? true : Boolean(b.entitlements.enableBarcodeScanner),
       };
+    }
+    if (b.receiptFormat === 'pos_thermal' || b.receiptFormat === 'a4_invoice') {
+      record.receiptFormat = b.receiptFormat;
+      record.posState.receiptFormat = b.receiptFormat;
     }
     if (typeof b.sheetUrl === 'string') {
       const trimmedUrl = b.sheetUrl.trim();
@@ -2356,9 +2376,9 @@ async function startServer() {
     });
   });
 
-  // Super Admin: Collect / Update Monthly Subscription Fee Invoice
+  // Super Admin: Collect / Edit Monthly Subscription Fee Invoice
   app.post('/api/superadmin/subscriptions/pay', requireSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
-    const { invoiceId, paymentMethod, note, status, amount } = req.body || {};
+    const { invoiceId, paymentMethod, note, status, amount, dueDate, receiptNo, plan } = req.body || {};
     const inv = db.invoices.find((i) => i.id === invoiceId);
     if (!inv) {
       res.status(404).json({ error: 'Subscription invoice not found.' });
@@ -2368,13 +2388,22 @@ async function startServer() {
     if (amount !== undefined) {
       inv.amount = Math.max(0, Number(amount) || 0);
     }
+    if (typeof dueDate === 'string' && dueDate.trim()) {
+      inv.dueDate = dueDate.trim();
+    }
+    if (typeof receiptNo === 'string' && receiptNo.trim()) {
+      inv.receiptNo = receiptNo.trim();
+    }
+    if (plan && (plan === 'Starter' || plan === 'Business' || plan === 'Enterprise' || plan === 'Custom')) {
+      inv.plan = plan;
+    }
     const nextStatus: SubscriptionPaymentStatus =
       status === 'Paid' || status === 'Pending' || status === 'Overdue' || status === 'Waived'
         ? status
-        : 'Paid';
+        : inv.status;
     inv.status = nextStatus;
-    inv.paidAt = nextStatus === 'Paid' ? new Date().toISOString() : null;
-    if (paymentMethod) inv.paymentMethod = String(paymentMethod);
+    inv.paidAt = nextStatus === 'Paid' ? (inv.paidAt || new Date().toISOString()) : null;
+    if (paymentMethod !== undefined) inv.paymentMethod = String(paymentMethod);
     if (note !== undefined) inv.note = String(note);
 
     const shop = db.shops[inv.shopId];

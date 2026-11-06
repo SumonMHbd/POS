@@ -32,6 +32,7 @@ import {
   type SaleTransaction,
   type ShopCategoryItem,
   type ShopFeatureEntitlements,
+  type ShopSubscriptionPlan,
   type StaffDashboardPermissions,
   type StaffMember,
   type WorkspaceTab,
@@ -98,6 +99,7 @@ export default function App() {
   const [isHydratingWorkspace, setIsHydratingWorkspace] = useState<boolean>(false);
   const [inspectingShopId, setInspectingShopId] = useState<string | null>(null);
   const [shopEntitlements, setShopEntitlements] = useState<ShopFeatureEntitlements | null>(null);
+  const [currentShopPlan, setCurrentShopPlan] = useState<ShopSubscriptionPlan>('Business');
   const [globalAnnouncement, setGlobalAnnouncement] = useState<string>('');
 
   // Modals & Notifications
@@ -178,6 +180,7 @@ export default function App() {
           setAuthSession(refreshedSession);
           setGlobalAnnouncement(res.globalAnnouncement || '');
           setShopEntitlements(res.shopEntitlements || null);
+          if (res.shopPlan) setCurrentShopPlan(res.shopPlan);
 
           if (res.shopState) {
             setState(res.shopState);
@@ -252,12 +255,14 @@ export default function App() {
       globalAnnouncement: string;
       shopState: PosStoreState | null;
       shopEntitlements: ShopFeatureEntitlements | null;
+      shopPlan?: ShopSubscriptionPlan | null;
     }) => {
       saveAuthSession(payload.session);
       setAuthSession(payload.session);
       setInspectingShopId(null);
       setGlobalAnnouncement(payload.globalAnnouncement || '');
       setShopEntitlements(payload.shopEntitlements || null);
+      if (payload.shopPlan) setCurrentShopPlan(payload.shopPlan);
 
       if (payload.shopState) {
         setState(payload.shopState);
@@ -292,6 +297,7 @@ export default function App() {
         setState(res.posState);
         await saveStoreSnapshot(res.posState);
         setShopEntitlements(res.entitlements);
+        if (res.subscription?.plan) setCurrentShopPlan(res.subscription.plan as ShopSubscriptionPlan);
         const pending = await getPendingMutations(shopId);
         setPendingOfflineCount(pending.length);
         setInspectingShopId(shopId);
@@ -1622,6 +1628,8 @@ export default function App() {
               cashierName={actorName}
               onCompleteSale={handleCompleteSale}
               onGoToInventory={() => setActiveTab('inventory')}
+              shopPlan={currentShopPlan}
+              entitlements={shopEntitlements || undefined}
             />
           )}
 

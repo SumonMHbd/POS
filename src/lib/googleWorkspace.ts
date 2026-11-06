@@ -4,6 +4,8 @@ import type {
   PosStoreState,
   SheetConnectionConfig,
   ShopFeatureEntitlements,
+  ShopReceiptPaperFormat,
+  ShopSubscriptionPlan,
   ShopTenantSummary,
   StaffDashboardPermissions,
   StaffMember,
@@ -262,6 +264,7 @@ export async function loginWithEmailPassword(email: string, password: string) {
     globalAnnouncement: string;
     shopState: PosStoreState | null;
     shopEntitlements: ShopFeatureEntitlements | null;
+    shopPlan?: ShopSubscriptionPlan | null;
   }>('/api/auth/login', null, {
     method: 'POST',
     body: JSON.stringify({ email, password }),
@@ -274,6 +277,7 @@ export async function fetchCurrentSession(token: string) {
     globalAnnouncement: string;
     shopState: PosStoreState | null;
     shopEntitlements: ShopFeatureEntitlements | null;
+    shopPlan?: ShopSubscriptionPlan | null;
   }>('/api/auth/me', token);
 }
 
@@ -341,6 +345,7 @@ export async function createNewTenantShop(
     nextBillingDate?: string;
     autoCreateGoogleSheet: boolean;
     customSheetUrl?: string;
+    receiptFormat?: ShopReceiptPaperFormat;
     entitlements?: Partial<ShopFeatureEntitlements>;
   }
 ) {
@@ -389,6 +394,9 @@ export async function recordSubscriptionPayment(
     paymentMethod?: string;
     note?: string;
     amount?: number;
+    dueDate?: string;
+    receiptNo?: string;
+    plan?: string;
   }
 ) {
   return apiFetch<{ invoice: SubscriptionInvoiceRecord }>('/api/superadmin/subscriptions/pay', token, {

@@ -9,6 +9,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  Barcode,
   Building2,
   CheckCircle2,
   Coins,
@@ -20,6 +21,9 @@ import {
   Eye,
   EyeOff,
   FileSpreadsheet,
+  FileText,
+  History,
+  Key,
   KeyRound,
   LogOut,
   Megaphone,
@@ -37,15 +41,17 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import type {
-  AuthSessionUser,
-  LanguageCode,
-  ShopAccountStatus,
-  ShopSubscriptionPlan,
-  ShopTenantSummary,
-  SubscriptionInvoiceRecord,
-  SubscriptionPaymentStatus,
-  SuperAdminOverviewResponse,
+import {
+  UserRole,
+  type AuthSessionUser,
+  type LanguageCode,
+  type ShopAccountStatus,
+  type ShopReceiptPaperFormat,
+  type ShopSubscriptionPlan,
+  type ShopTenantSummary,
+  type SubscriptionInvoiceRecord,
+  type SubscriptionPaymentStatus,
+  type SuperAdminOverviewResponse,
 } from '../types/pos';
 import { formatBDT, formatPct } from '../i18n/translations';
 import {
@@ -66,6 +72,7 @@ import {
   exportSuperAdminShopsSummaryCsv,
   exportSuperAdminSubscriptionsCsv,
 } from '../lib/exportReports';
+import { downloadSubscriptionInvoicePdf } from '../lib/pdfGenerator';
 import { AppPopupModal } from './AppPopupModal';
 import { ConfirmActionModal, type ConfirmDialogState } from './ConfirmActionModal';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -134,6 +141,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [newBillingStatus, setNewBillingStatus] = useState<SubscriptionPaymentStatus>('Paid');
   const [newAutoCreateSheet, setNewAutoCreateSheet] = useState<boolean>(true);
   const [newCustomSheetUrl, setNewCustomSheetUrl] = useState('');
+  const [newReceiptFormat, setNewReceiptFormat] = useState<ShopReceiptPaperFormat>('pos_thermal');
   const [newEnableEcommerce, setNewEnableEcommerce] = useState(true);
   const [newEnableCredit, setNewEnableCredit] = useState(true);
   const [newMaxStaff, setNewMaxStaff] = useState('10');
@@ -154,6 +162,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [editBillingStatus, setEditBillingStatus] = useState<SubscriptionPaymentStatus>('Paid');
   const [editNextBillingDate, setEditNextBillingDate] = useState('');
   const [editSheetUrl, setEditSheetUrl] = useState('');
+  const [editReceiptFormat, setEditReceiptFormat] = useState<ShopReceiptPaperFormat>('pos_thermal');
   const [editEnableEcom, setEditEnableEcom] = useState(true);
   const [editEnableCredit, setEditEnableCredit] = useState(true);
   const [editEnableExports, setEditEnableExports] = useState(true);
@@ -163,6 +172,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   // Subscription Billing Filter & Payment Modal
   const [invoiceMonthFilter, setInvoiceMonthFilter] = useState<string>('ALL');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'ALL' | SubscriptionPaymentStatus>('ALL');
+  const [invoiceShopFilter, setInvoiceShopFilter] = useState<string>('ALL');
   const [generateMonthInput, setGenerateMonthInput] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
@@ -171,6 +181,15 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   const [payAmount, setPayAmount] = useState<string>('');
   const [payMethod, setPayMethod] = useState<string>('bKash / Nagad');
   const [payNote, setPayNote] = useState<string>('');
+  const [payDueDate, setPayDueDate] = useState<string>('');
+  const [payReceiptNo, setPayReceiptNo] = useState<string>('');
+  const [payPlan, setPayPlan] = useState<ShopSubscriptionPlan>('Business');
+
+  // Quick Password View & Edit State for Shop Owners
+  const [revealedShopPasswords, setRevealedShopPasswords] = useState<Record<string, boolean>>({});
+  const [quickPassShop, setQuickPassShop] = useState<ShopTenantSummary | null>(null);
+  const [quickNewPassword, setQuickNewPassword] = useState<string>('');
+  const [isSavingQuickPass, setIsSavingQuickPass] = useState(false);
 
   // Engine & Platform Settings Form State
   const [appsScriptUrl, setAppsScriptUrl] = useState('');
@@ -289,9 +308,10 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     return list.filter((inv) => {
       if (invoiceMonthFilter !== 'ALL' && inv.monthKey !== invoiceMonthFilter) return false;
       if (invoiceStatusFilter !== 'ALL' && inv.status !== invoiceStatusFilter) return false;
+      if (invoiceShopFilter !== 'ALL' && inv.shopId !== invoiceShopFilter) return false;
       return true;
     });
-  }, [overview, invoiceMonthFilter, invoiceStatusFilter]);
+  }, [overview, invoiceMonthFilter, invoiceStatusFilter, invoiceShopFilter]);
 
   const uniqueInvoiceMonths = useMemo(() => {
     const set = new Set<string>((overview?.invoices || []).map((i) => i.monthKey));
@@ -314,6 +334,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     setEditBillingStatus(shop.billingStatus);
     setEditNextBillingDate(shop.nextBillingDate);
     setEditSheetUrl(shop.sheetConfig.spreadsheetUrl || '');
+    setEditReceiptFormat(shop.receiptFormat || 'pos_thermal');
     setEditEnableEcom(shop.entitlements.enableEcommerce);
     setEditEnableCredit(shop.entitlements.enableCreditLedger);
     setEditEnableExports(shop.entitlements.enableAuditExports);
@@ -337,6 +358,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         plan: newPlan,
         monthlySubscriptionFee: Math.max(0, Number(newMonthlyFee) || 0),
         billingStatus: newBillingStatus,
+        receiptFormat: newReceiptFormat,
         autoCreateGoogleSheet: newAutoCreateSheet,
         customSheetUrl: newCustomSheetUrl.trim() || undefined,
         entitlements: {
@@ -359,6 +381,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
       setNewOwnerName('');
       setNewOwnerEmail('');
       setNewCustomSheetUrl('');
+      setNewReceiptFormat('pos_thermal');
       setShowCreateModal(false);
       await loadData();
     } catch (err: unknown) {
@@ -388,6 +411,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         billingStatus: editBillingStatus,
         nextBillingDate: editNextBillingDate,
         sheetUrl: editSheetUrl,
+        receiptFormat: editReceiptFormat,
         entitlements: {
           enableEcommerce: editEnableEcom,
           enableCreditLedger: editEnableCredit,
@@ -456,6 +480,40 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     }
   };
 
+  const getShopOwnerPassword = useCallback(
+    (shopId: string): string => {
+      if (!overview?.credentialVault) return '';
+      const item = overview.credentialVault.find(
+        (c) => c.shopId === shopId && c.role === UserRole.OWNER
+      );
+      return item?.passwordPlain || '';
+    },
+    [overview?.credentialVault]
+  );
+
+  const handleSaveQuickPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickPassShop || !quickNewPassword.trim()) return;
+    setIsSavingQuickPass(true);
+    try {
+      await updateTenantShop(session.token, quickPassShop.shopId, {
+        ownerPassword: quickNewPassword.trim(),
+      });
+      onNotify(
+        lang === 'bn'
+          ? `"${quickPassShop.shopNameBn}" এর পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!`
+          : `Password updated successfully for "${quickPassShop.shopNameEn}"!`
+      );
+      setQuickPassShop(null);
+      setQuickNewPassword('');
+      await loadData();
+    } catch (err: unknown) {
+      onNotify(err instanceof Error ? err.message : 'Failed updating password', true);
+    } finally {
+      setIsSavingQuickPass(false);
+    }
+  };
+
   const handleSavePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingInvoice) return;
@@ -466,11 +524,14 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         amount: Math.max(0, Number(payAmount) || 0),
         paymentMethod: payMethod,
         note: payNote,
+        dueDate: payDueDate,
+        receiptNo: payReceiptNo,
+        plan: payPlan,
       });
       onNotify(
         lang === 'bn'
-          ? 'সাবস্ক্রিপশন বিল আপডেট সম্পন্ন হয়েছে!'
-          : 'Subscription fee invoice updated!'
+          ? 'সাবস্ক্রিপশন ইনভয়েস সফলভাবে সংরক্ষিত হয়েছে!'
+          : 'Subscription invoice updated and saved successfully!'
       );
       setPayingInvoice(null);
       await loadData();
@@ -1075,20 +1136,23 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                 <table className="pro-table">
                   <thead>
                     <tr>
-                      <th className="min-w-[180px] text-left">
+                      <th className="min-w-[170px] text-left">
                         {lang === 'bn' ? 'দোকান ও মালিক' : 'Shop & Owner'}
                       </th>
-                      <th className="w-28 text-right whitespace-nowrap">
-                        {lang === 'bn' ? 'স্টক মূল্য' : 'Stock Value'}
+                      <th className="w-36 text-left whitespace-nowrap">
+                        Google Sheet
                       </th>
-                      <th className="w-32 text-right whitespace-nowrap">
-                        {lang === 'bn' ? 'বিক্রি ও লাভ' : 'Sales & Profit'}
+                      <th className="w-36 text-left whitespace-nowrap">
+                        {lang === 'bn' ? 'মালিকের পাসওয়ার্ড' : 'Owner Password'}
+                      </th>
+                      <th className="w-28 text-left whitespace-nowrap">
+                        {lang === 'bn' ? 'প্ল্যান' : 'Plan'}
                       </th>
                       <th className="w-28 text-right whitespace-nowrap">
                         {lang === 'bn' ? 'মাসিক ফি' : 'Monthly Fee'}
                       </th>
-                      <th className="w-36 text-left whitespace-nowrap">
-                        Google Sheet
+                      <th className="w-32 text-right whitespace-nowrap">
+                        {lang === 'bn' ? 'বিক্রি ও স্টক' : 'Sales & Stock'}
                       </th>
                       <th className="w-px text-right whitespace-nowrap">
                         {lang === 'bn' ? 'অ্যাকশন' : 'Actions'}
@@ -1102,12 +1166,16 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                         .trim()
                         .charAt(0)
                         .toUpperCase();
+                      const ownerPass = getShopOwnerPassword(shop.shopId);
+                      const isPassShown = Boolean(revealedShopPasswords[shop.shopId]);
+                      const isEnterprise = shop.plan === 'Enterprise' || Boolean(shop.entitlements?.enableBarcodeScanner);
 
                       return (
                         <tr
                           key={shop.shopId}
                           className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                         >
+                          {/* Shop & Owner */}
                           <td>
                             <div className="flex items-start gap-2.5">
                               <div
@@ -1116,80 +1184,81 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                 {initial}
                               </div>
                               <div className="min-w-0">
-                                <div className="font-bold text-slate-900 dark:text-slate-100 break-words">
-                                  {shop.shopNameBn}{' '}
+                                <div className="font-bold text-slate-900 dark:text-slate-100 break-words flex items-center gap-1.5 flex-wrap">
+                                  <span>{shop.shopNameBn}</span>
                                   <span className="font-normal text-slate-500">
                                     ({shop.shopNameEn})
                                   </span>
-                                </div>
-                                <div className="text-[11px] font-mono text-slate-500 mt-0.5 break-all sm:break-normal">
-                                  {shop.ownerName} · {shop.ownerEmail}
-                                </div>
-                                <div className="text-[11px] text-slate-400 mt-0.5 break-words">
-                                  {shop.businessType} · Staff: {shop.metrics.staffCount} ·{' '}
                                   <span
-                                    className={
+                                    className={`px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase ${
                                       shop.status === 'Suspended'
-                                        ? 'text-rose-600 dark:text-rose-400 font-semibold'
+                                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                                         : shop.status === 'Trial'
-                                        ? 'text-amber-600 dark:text-amber-400 font-semibold'
-                                        : 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                                    }
+                                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                    }`}
                                   >
                                     {shop.status}
                                   </span>
+                                </div>
+                                <div className="text-[11px] font-mono text-slate-500 mt-0.5 break-all sm:break-normal">
+                                  {shop.ownerName} · {shop.ownerEmail} {shop.phone ? `· ${shop.phone}` : ''}
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                  {shop.businessType} · Staff: {shop.metrics.staffCount}
                                 </div>
                               </div>
                             </div>
                           </td>
 
-                          <td className="text-right font-mono tabular-nums whitespace-nowrap">
-                            <div className="font-semibold text-slate-900 dark:text-slate-100">
-                              {formatBDT(shop.metrics.stockValue)}
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              {shop.metrics.skuCount} SKUs
-                            </div>
-                          </td>
-
-                          <td className="text-right font-mono tabular-nums whitespace-nowrap">
-                            <div className="font-semibold text-slate-900 dark:text-slate-100">
-                              {formatBDT(shop.metrics.monthlySales)}
-                            </div>
-                            <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                              Net: {formatBDT(shop.metrics.monthlyNetProfit)}
-                            </div>
-                          </td>
-
-                          <td className="text-right font-mono tabular-nums whitespace-nowrap">
-                            <div className="font-bold text-slate-900 dark:text-slate-100">
-                              {formatBDT(shop.monthlySubscriptionFee)}/mo
-                            </div>
-                            <div
-                              className={`text-[11px] font-semibold ${
-                                shop.billingStatus === 'Paid'
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : shop.billingStatus === 'Overdue'
-                                  ? 'text-rose-600 dark:text-rose-400'
-                                  : 'text-amber-600 dark:text-amber-400'
-                              }`}
-                            >
-                              {shop.plan} · {shop.billingStatus}
-                            </div>
-                          </td>
-
+                          {/* Google Sheet Link & Bill Format */}
                           <td>
                             {shop.sheetConfig.spreadsheetUrl ? (
-                              <a
-                                href={shop.sheetConfig.spreadsheetUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold hover:underline whitespace-nowrap"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                                <span>{lang === 'bn' ? 'শিট খুলুন' : 'Open Sheet'}</span>
-                                <ExternalLink className="h-3 w-3 shrink-0" />
-                              </a>
+                              <div className="space-y-1 max-w-[210px]">
+                                <a
+                                  href={shop.sheetConfig.spreadsheetUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold hover:underline text-xs group"
+                                  title={shop.sheetConfig.spreadsheetUrl}
+                                >
+                                  <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                  <span className="truncate max-w-[140px]">
+                                    {shop.sheetConfig.spreadsheetTitle || `${shop.shopNameEn} Sheet`}
+                                  </span>
+                                  <ExternalLink className="h-3 w-3 shrink-0 opacity-70 group-hover:opacity-100" />
+                                </a>
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  <a
+                                    href={shop.sheetConfig.spreadsheetUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-[110px]"
+                                    title={shop.sheetConfig.spreadsheetUrl}
+                                  >
+                                    docs.google.com/...
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
+                                      onNotify(lang === 'bn' ? 'গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Google Sheet URL copied!');
+                                    }}
+                                    className="text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-semibold whitespace-nowrap"
+                                  >
+                                    {lang === 'bn' ? 'কপি' : 'Copy'}
+                                  </button>
+                                </div>
+                                <div className="pt-0.5">
+                                  <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    shop.receiptFormat === 'a4_invoice'
+                                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                  }`}>
+                                    {shop.receiptFormat === 'a4_invoice' ? '📄 A4 Invoice' : '🧾 80mm POS'}
+                                  </span>
+                                </div>
+                              </div>
                             ) : (
                               <button
                                 type="button"
@@ -1207,25 +1276,123 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                 </span>
                               </button>
                             )}
-                            <div className="text-[10px] text-slate-400 max-w-[155px] line-clamp-1 break-words mt-0.5">
-                              {shop.sheetConfig.spreadsheetTitle}
+                          </td>
+
+                          {/* Shop Owner Password (View & Quick Edit) */}
+                          <td className="whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                {isPassShown ? ownerPass || '123456' : '••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedShopPasswords((prev) => ({
+                                    ...prev,
+                                    [shop.shopId]: !prev[shop.shopId],
+                                  }))
+                                }
+                                title={isPassShown ? 'Hide Password' : 'Show Password'}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                              >
+                                {isPassShown ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickPassShop(shop);
+                                  setQuickNewPassword(ownerPass || '123456');
+                                }}
+                                title={lang === 'bn' ? 'পাসওয়ার্ড পরিবর্তন করুন' : 'Edit Password'}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                              >
+                                <Key className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              </button>
                             </div>
                           </td>
 
+                          {/* Subscription Plan & Barcode scanner support */}
+                          <td className="whitespace-nowrap">
+                            <div className="space-y-1">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                  isEnterprise
+                                    ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+                                    : shop.plan === 'Business'
+                                    ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
+                                    : 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30'
+                                }`}
+                              >
+                                {shop.plan}
+                              </span>
+                              {isEnterprise && (
+                                <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                  <Barcode className="w-3 h-3" />
+                                  <span>Barcode Active</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Monthly Fee & Billing */}
+                          <td className="text-right font-mono tabular-nums whitespace-nowrap">
+                            <div className="font-bold text-slate-900 dark:text-slate-100">
+                              {formatBDT(shop.monthlySubscriptionFee)}/mo
+                            </div>
+                            <div
+                              className={`text-[11px] font-semibold ${
+                                shop.billingStatus === 'Paid'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : shop.billingStatus === 'Overdue'
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-amber-600 dark:text-amber-400'
+                              }`}
+                            >
+                              {shop.billingStatus}
+                            </div>
+                          </td>
+
+                          {/* Sales & Stock */}
+                          <td className="text-right font-mono tabular-nums whitespace-nowrap">
+                            <div className="font-semibold text-slate-900 dark:text-slate-100">
+                              {formatBDT(shop.metrics.monthlySales)}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              Stock: {formatBDT(shop.metrics.stockValue)}
+                            </div>
+                          </td>
+
+                          {/* Actions */}
                           <td className="text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => onInspectShopPos(shop.shopId)}
-                                className={`min-h-[32px] inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
+                                className={`min-h-[30px] inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
                               >
                                 <Eye className="h-3.5 w-3.5" />
-                                <span>{lang === 'bn' ? 'দোকান দেখুন' : 'Open POS'}</span>
+                                <span>{lang === 'bn' ? 'POS' : 'Open POS'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInvoiceShopFilter(shop.shopId);
+                                  setActiveTab('subscriptions');
+                                }}
+                                className={`min-h-[30px] inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-semibold whitespace-nowrap ${NEU_SURFACE_BTN}`}
+                                title={lang === 'bn' ? 'সাবস্ক্রিপশন পেমেন্ট হিস্ট্রি দেখুন' : 'View Subscription Payment History'}
+                              >
+                                <History className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>{lang === 'bn' ? 'হিস্ট্রি' : 'History'}</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openEditShopModal(shop)}
-                                className={`min-h-[32px] p-1.5 rounded-xl ${NEU_SURFACE_BTN}`}
+                                className={`min-h-[30px] p-1.5 rounded-xl ${NEU_SURFACE_BTN}`}
                                 title="Edit Shop & Monthly Fee"
                               >
                                 <Edit3 className="h-3.5 w-3.5" />
@@ -1233,7 +1400,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleRequestDeleteShop(shop)}
-                                className={`min-h-[32px] p-1.5 rounded-xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 hover:bg-rose-100/80 dark:hover:bg-rose-950/60 ${NEU_TINT_BTN}`}
+                                className={`min-h-[30px] p-1.5 rounded-xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 hover:bg-rose-100/80 dark:hover:bg-rose-950/60 ${NEU_TINT_BTN}`}
                                 title="Delete Shop"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -1419,6 +1586,25 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                   </select>
                 </div>
 
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'ক্যাশ মেমো / বিল প্রিন্ট পেপার সাইজ *' : 'Cash Memo / Bill Print Paper Size *'}
+                  </label>
+                  <select
+                    value={newReceiptFormat}
+                    onChange={(e) => setNewReceiptFormat(e.target.value as ShopReceiptPaperFormat)}
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-medium"
+                  >
+                    <option value="pos_thermal">1) POS machine size paper (80mm thermal roll)</option>
+                    <option value="a4_invoice">2) A4 size paper (Professional retail invoice)</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {lang === 'bn'
+                      ? 'দোকানদার বিক্রি শেষে প্রিন্ট দিলে বা ডিভাইস কানেক্ট না থাকলে এই সাইজেই অটো PDF ডাউনলোড হবে।'
+                      : 'POS terminal will default to this layout for printing and automatic PDF downloads.'}
+                  </p>
+                </div>
+
                 <div className="sm:col-span-2 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer font-semibold text-emerald-900 dark:text-emerald-300">
                     <input
@@ -1512,6 +1698,60 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                           <strong className="font-mono whitespace-nowrap">
                             {formatBDT(shop.metrics.monthlySales)}
                           </strong>
+                        </div>
+
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-slate-500 text-[11px]">Google Sheet:</span>
+                          {shop.sheetConfig.spreadsheetUrl ? (
+                            <div className="inline-flex items-center gap-1.5 flex-wrap">
+                              <a
+                                href={shop.sheetConfig.spreadsheetUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
+                                title={shop.sheetConfig.spreadsheetUrl}
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span className="truncate max-w-[180px]">
+                                  {shop.sheetConfig.spreadsheetTitle || `${shop.shopNameEn} Sheet`}
+                                </span>
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
+                                  onNotify(lang === 'bn' ? 'গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Google Sheet URL copied!');
+                                }}
+                                className="text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 underline cursor-pointer"
+                              >
+                                {lang === 'bn' ? 'লিঙ্ক কপি' : 'Copy link'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busySheetShopId === shop.shopId}
+                              onClick={() => handleProvisionGoogleSheetNow(shop)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 shrink-0" />
+                              <span>{busySheetShopId === shop.shopId ? 'Creating...' : '+ Create Google Sheet'}</span>
+                            </button>
+                          )}
+
+                          <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">|</span>
+
+                          <span className="font-semibold text-slate-500 text-[11px]">Memo Format:</span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold ${
+                              shop.receiptFormat === 'a4_invoice'
+                                ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {shop.receiptFormat === 'a4_invoice' ? '📄 A4 Size Paper' : '🧾 80mm POS Roll'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1729,6 +1969,19 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-0.5">
                   <select
+                    value={invoiceShopFilter}
+                    onChange={(e) => setInvoiceShopFilter(e.target.value)}
+                    className="min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 py-1 text-xs shrink-0 max-w-[170px]"
+                  >
+                    <option value="ALL">{lang === 'bn' ? 'সকল দোকান (All Shops)' : 'All Shops'}</option>
+                    {overview.shops.map((s) => (
+                      <option key={s.shopId} value={s.shopId}>
+                        {s.shopNameEn || s.shopNameBn}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
                     value={invoiceMonthFilter}
                     onChange={(e) => setInvoiceMonthFilter(e.target.value)}
                     className="min-h-[36px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 py-1 text-xs font-mono shrink-0"
@@ -1770,73 +2023,125 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                 <table className="pro-table">
                   <thead>
                     <tr>
-                      <th className="w-32 text-left whitespace-nowrap">
+                      <th className="w-28 text-left whitespace-nowrap">
                         {lang === 'bn' ? 'রশিদ নং' : 'Receipt No'}
                       </th>
-                      <th className="w-24 text-left whitespace-nowrap">
-                        {lang === 'bn' ? 'মাস' : 'Month'}
+                      <th className="w-20 text-left whitespace-nowrap">
+                        {lang === 'bn' ? 'বিলিং মাস' : 'Month'}
                       </th>
-                      <th className="min-w-[160px] text-left">
+                      <th className="min-w-[150px] text-left">
                         {lang === 'bn' ? 'দোকান ও মালিক' : 'Shop & Owner'}
+                      </th>
+                      <th className="w-24 text-left whitespace-nowrap">
+                        {lang === 'bn' ? 'প্ল্যান' : 'Plan'}
                       </th>
                       <th className="w-28 text-right whitespace-nowrap">
                         {lang === 'bn' ? 'পরিমাণ' : 'Amount'}
                       </th>
                       <th className="w-36 text-left whitespace-nowrap">
-                        {lang === 'bn' ? 'স্ট্যাটাস ও মাধ্যম' : 'Status · Method'}
+                        {lang === 'bn' ? 'স্ট্যাটাস ও মাধ্যম' : 'Status & Method'}
+                      </th>
+                      <th className="w-28 text-left whitespace-nowrap">
+                        {lang === 'bn' ? 'নির্ধারিত তারিখ' : 'Due Date'}
                       </th>
                       <th className="w-px text-right whitespace-nowrap">
-                        {lang === 'bn' ? 'অ্যাকশন' : 'Action'}
+                        {lang === 'bn' ? 'অ্যাকশন' : 'Actions'}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredInvoices.map((inv) => (
-                      <tr key={inv.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                        <td className="font-mono whitespace-nowrap">{inv.receiptNo}</td>
-                        <td className="font-mono whitespace-nowrap">{inv.monthKey}</td>
-                        <td className="break-words">
-                          <div className="font-semibold">
-                            {inv.shopNameBn} ({inv.shopNameEn})
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-500 break-all sm:break-normal">
-                            {inv.ownerEmail}
-                          </div>
-                        </td>
-                        <td className="text-right font-mono tabular-nums font-bold whitespace-nowrap">
-                          {formatBDT(inv.amount)}
-                        </td>
-                        <td className="whitespace-nowrap">
-                          <span
-                            className={`font-semibold ${
-                              inv.status === 'Paid'
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : inv.status === 'Overdue'
-                                ? 'text-rose-600 dark:text-rose-400'
-                                : 'text-amber-600 dark:text-amber-400'
-                            }`}
-                          >
-                            {inv.status}
-                          </span>
-                          {inv.paymentMethod ? ` · ${inv.paymentMethod}` : ''}
-                        </td>
-                        <td className="text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPayingInvoice(inv);
-                              setPayStatus('Paid');
-                              setPayAmount(String(inv.amount));
-                              setPayMethod(inv.paymentMethod || 'bKash / Nagad');
-                              setPayNote(inv.note || '');
-                            }}
-                            className={`min-h-[30px] rounded-xl bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
-                          >
-                            {inv.status === 'Paid' ? 'Edit Receipt' : 'Collect Fee'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredInvoices.map((inv) => {
+                      const matchedShop = overview.shops.find((s) => s.shopId === inv.shopId);
+                      return (
+                        <tr key={inv.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                            {inv.receiptNo}
+                          </td>
+                          <td className="font-mono text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            {inv.monthKey}
+                          </td>
+                          <td className="break-words">
+                            <div className="font-bold text-slate-900 dark:text-slate-100">
+                              {inv.shopNameBn} ({inv.shopNameEn})
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-500 break-all sm:break-normal">
+                              {inv.ownerEmail}
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap font-medium text-xs">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                inv.plan === 'Enterprise'
+                                  ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
+                                  : inv.plan === 'Business'
+                                  ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
+                                  : 'bg-slate-500/15 text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {inv.plan}
+                            </span>
+                          </td>
+                          <td className="text-right font-mono tabular-nums font-bold text-sm whitespace-nowrap">
+                            {formatBDT(inv.amount)}
+                          </td>
+                          <td className="whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                inv.status === 'Paid'
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                                  : inv.status === 'Overdue'
+                                  ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                                  : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                              }`}
+                            >
+                              {inv.status}
+                            </span>
+                            {inv.paymentMethod ? (
+                              <div className="text-[11px] text-slate-500 mt-0.5">{inv.paymentMethod}</div>
+                            ) : null}
+                          </td>
+                          <td className="font-mono text-xs text-slate-500 whitespace-nowrap">
+                            {inv.dueDate || '10th of month'}
+                          </td>
+                          <td className="text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  downloadSubscriptionInvoicePdf({
+                                    invoice: inv,
+                                    shop: matchedShop,
+                                    superAdminEmail: overview.superAdminProfile.email,
+                                  })
+                                }
+                                title={lang === 'bn' ? 'PDF ইনভয়েস ডাউনলোড করুন' : 'Download Invoice PDF'}
+                                className={`min-h-[30px] inline-flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 whitespace-nowrap ${NEU_TINT_BTN}`}
+                              >
+                                <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>{lang === 'bn' ? 'PDF রসিদ' : 'PDF Invoice'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPayingInvoice(inv);
+                                  setPayStatus(inv.status);
+                                  setPayAmount(String(inv.amount));
+                                  setPayMethod(inv.paymentMethod || 'bKash / Nagad');
+                                  setPayNote(inv.note || '');
+                                  setPayDueDate(inv.dueDate || '');
+                                  setPayReceiptNo(inv.receiptNo || '');
+                                  setPayPlan(inv.plan || 'Business');
+                                }}
+                                className={`min-h-[30px] inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
+                              >
+                                <Edit3 className="h-3 w-3" />
+                                <span>{inv.status === 'Paid' ? 'Edit Invoice' : 'Collect Fee'}</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2479,6 +2784,19 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                   <option value="Pending">Pending</option>
                   <option value="Waived">Trial (Waived)</option>
                 </select>
+                <div className="sm:col-span-2 min-w-0">
+                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
+                    Cash Memo Print Paper Size *
+                  </label>
+                  <select
+                    value={newReceiptFormat}
+                    onChange={(e) => setNewReceiptFormat(e.target.value as ShopReceiptPaperFormat)}
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-medium"
+                  >
+                    <option value="pos_thermal">1) POS machine size paper (80mm thermal roll)</option>
+                    <option value="a4_invoice">2) A4 size paper (Professional retail invoice)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -2692,6 +3010,19 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                 </div>
                 <div className="sm:col-span-2 min-w-0">
                   <label className="block font-semibold mb-1 truncate whitespace-nowrap">
+                    Cash Memo Print Paper Size
+                  </label>
+                  <select
+                    value={editReceiptFormat}
+                    onChange={(e) => setEditReceiptFormat(e.target.value as ShopReceiptPaperFormat)}
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-medium"
+                  >
+                    <option value="pos_thermal">1) POS machine size paper (80mm thermal roll)</option>
+                    <option value="a4_invoice">2) A4 size paper (Professional retail invoice)</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2 min-w-0">
+                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
                     Linked Google Sheet URL
                   </label>
                   <input
@@ -2771,16 +3102,16 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         )}
       </AppPopupModal>
 
-      {/* Record Subscription Payment Modal */}
+      {/* Edit / Record Subscription Invoice Modal */}
       <AppPopupModal
         isOpen={Boolean(payingInvoice)}
         onClose={() => setPayingInvoice(null)}
-        maxWidthClass="max-w-3xl"
-        heightMode="screen"
+        maxWidthClass="max-w-2xl"
+        heightMode="compact"
         ariaLabel={
           payingInvoice
-            ? `Subscription Fee — ${payingInvoice.shopNameEn} (${payingInvoice.monthKey})`
-            : 'Subscription Fee'
+            ? `Subscription Invoice — ${payingInvoice.shopNameEn} (${payingInvoice.monthKey})`
+            : 'Subscription Invoice'
         }
       >
         {payingInvoice && (
@@ -2790,15 +3121,15 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
           >
             <div className="shrink-0 flex items-center justify-between gap-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/95 px-4 py-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                  <CreditCard className="h-4 w-4" />
+                <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <CreditCard className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-bold leading-snug break-words">
-                    Subscription Fee — {payingInvoice.shopNameEn} ({payingInvoice.monthKey})
+                    Edit Subscription Invoice — {payingInvoice.shopNameEn}
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
-                    Update monthly SaaS invoice payment status & transaction reference
+                    Modify billing terms, receipt number, plan tier, or record payment
                   </p>
                 </div>
               </div>
@@ -2813,31 +3144,66 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 p-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 p-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] text-slate-500 whitespace-nowrap">Shop</div>
+                  <div className="text-[11px] text-slate-500">Shop</div>
                   <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
                     {payingInvoice.shopNameEn}
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] text-slate-500 whitespace-nowrap">Billing Month</div>
+                  <div className="text-[11px] text-slate-500">Owner Email</div>
+                  <div className="font-mono text-slate-700 dark:text-slate-300 truncate">
+                    {payingInvoice.ownerEmail}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] text-slate-500">Billing Month</div>
                   <div className="font-mono font-bold text-slate-900 dark:text-slate-100 truncate">
                     {payingInvoice.monthKey}
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] text-slate-500 whitespace-nowrap">Invoice Amount</div>
-                  <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400 truncate">
-                    {formatBDT(payingInvoice.amount)}
+                  <div className="text-[11px] text-slate-500">Current Status</div>
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                    {payingInvoice.status}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="sm:col-span-2 min-w-0">
-                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
-                    Subscription Fee Amount (৳)
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'রশিদ / ইনভয়েস নং' : 'Receipt / Invoice No'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={payReceiptNo}
+                    onChange={(e) => setPayReceiptNo(e.target.value)}
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-mono font-bold"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'সাবস্ক্রিপশন প্ল্যান' : 'Subscription Plan'}
+                  </label>
+                  <select
+                    value={payPlan}
+                    onChange={(e) => setPayPlan(e.target.value as ShopSubscriptionPlan)}
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2"
+                  >
+                    <option value="Starter">Starter</option>
+                    <option value="Business">Business</option>
+                    <option value="Enterprise">Enterprise (Barcode Scanner Active)</option>
+                    <option value="Custom">Custom</option>
+                  </select>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'ফি পরিমাণ (৳)' : 'Fee Amount (BDT)'}
                   </label>
                   <input
                     type="number"
@@ -2850,8 +3216,21 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                 </div>
 
                 <div className="min-w-0">
-                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
-                    Payment Status
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'পরিশোধের শেষ তারিখ' : 'Payment Due Date'}
+                  </label>
+                  <input
+                    type="text"
+                    value={payDueDate}
+                    onChange={(e) => setPayDueDate(e.target.value)}
+                    placeholder="YYYY-MM-DD or 10th of month"
+                    className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-mono"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'পেমেন্ট স্ট্যাটাস' : 'Payment Status'}
                   </label>
                   <select
                     value={payStatus}
@@ -2866,48 +3245,145 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                 </div>
 
                 <div className="min-w-0">
-                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
-                    Payment Method
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'পেমেন্ট মেথড' : 'Payment Method'}
                   </label>
                   <select
                     value={payMethod}
                     onChange={(e) => setPayMethod(e.target.value)}
                     className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2"
                   >
-                    <option value="bKash / Nagad">bKash / Nagad</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="bKash / Nagad">bKash / Nagad Personal (01714-605024)</option>
+                    <option value="Cash">Cash Counter</option>
+                    <option value="Bank Transfer">Bank Transfer / EFT</option>
+                    <option value="Waived / Trial">Waived / Promotional</option>
                   </select>
                 </div>
 
                 <div className="sm:col-span-2 min-w-0">
-                  <label className="block font-semibold mb-1 truncate whitespace-nowrap">
-                    Transaction / Reference Note
+                  <label className="block font-semibold mb-1">
+                    {lang === 'bn' ? 'ট্রানজ্যাকশন আইডি / নোট' : 'TrxID / Reference Note'}
                   </label>
                   <input
                     type="text"
                     value={payNote}
                     onChange={(e) => setPayNote(e.target.value)}
-                    placeholder="TrxID or receipt note"
+                    placeholder="e.g., bKash TrxID: 9X87KL24 / Handover note"
                     className="w-full min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="shrink-0 flex items-center justify-end gap-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/95 px-4 py-3">
+            <div className="shrink-0 flex items-center justify-between gap-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/95 px-4 py-3">
               <button
                 type="button"
-                onClick={() => setPayingInvoice(null)}
-                className={`min-h-[38px] px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap ${NEU_SURFACE_BTN}`}
+                onClick={() => {
+                  const currentInvSnapshot: SubscriptionInvoiceRecord = {
+                    ...payingInvoice,
+                    amount: Math.max(0, Number(payAmount) || payingInvoice.amount),
+                    status: payStatus,
+                    paymentMethod: payMethod,
+                    note: payNote,
+                    dueDate: payDueDate,
+                    receiptNo: payReceiptNo,
+                    plan: payPlan,
+                  };
+                  downloadSubscriptionInvoicePdf({
+                    invoice: currentInvSnapshot,
+                    shop: overview?.shops.find((s) => s.shopId === payingInvoice.shopId),
+                    superAdminEmail: overview?.superAdminProfile.email,
+                  });
+                }}
+                className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 whitespace-nowrap shadow-xs ${NEU_TINT_BTN}`}
+              >
+                <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>{lang === 'bn' ? 'A4 PDF ইনভয়েস ডাউনলোড' : 'Download A4 PDF'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayingInvoice(null)}
+                  className={`min-h-[38px] px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap ${NEU_SURFACE_BTN}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`min-h-[38px] px-5 py-2 rounded-xl bg-emerald-600 text-xs text-white font-bold hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
+                >
+                  Save Invoice
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </AppPopupModal>
+
+      {/* Quick Edit Password Modal for Shop Owners */}
+      <AppPopupModal
+        isOpen={Boolean(quickPassShop)}
+        onClose={() => setQuickPassShop(null)}
+        maxWidthClass="max-w-md"
+        heightMode="compact"
+        ariaLabel={
+          quickPassShop
+            ? `Edit Password — ${quickPassShop.shopNameEn}`
+            : 'Edit Shop Password'
+        }
+      >
+        {quickPassShop && (
+          <form onSubmit={handleSaveQuickPassword} className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+                <Key className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                  {lang === 'bn' ? 'মালিকের পাসওয়ার্ড পরিবর্তন' : 'Edit Shop Owner Password'}
+                </h3>
+                <p className="text-xs text-slate-500 truncate">
+                  {quickPassShop.shopNameBn} ({quickPassShop.ownerEmail})
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                {lang === 'bn' ? 'নতুন পাসওয়ার্ড লিখুন *' : 'Enter New Password *'}
+              </label>
+              <input
+                type="text"
+                required
+                minLength={4}
+                value={quickNewPassword}
+                onChange={(e) => setQuickNewPassword(e.target.value)}
+                placeholder="New password (e.g., 123456)"
+                className="w-full min-h-[42px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3.5 py-2 text-sm font-mono focus:border-emerald-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-slate-500">
+                {lang === 'bn'
+                  ? 'এই পাসওয়ার্ডটি দিয়ে দোকানের মালিক সরাসরি POS এ লগইন করতে পারবেন।'
+                  : 'The shop owner can instantly use this password to sign in to their POS counter.'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setQuickPassShop(null)}
+                disabled={isSavingQuickPass}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className={`min-h-[38px] px-5 py-2 rounded-xl bg-emerald-600 text-xs text-white font-bold hover:bg-emerald-700 whitespace-nowrap ${NEU_SOLID_BTN}`}
+                disabled={isSavingQuickPass || !quickNewPassword.trim()}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
               >
-                Save Invoice
+                {isSavingQuickPass ? 'Saving...' : 'Update Password'}
               </button>
             </div>
           </form>

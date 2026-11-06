@@ -324,7 +324,7 @@ export const EcommerceSyncView: React.FC<EcommerceSyncViewProps> = ({
             {deliveredCount} / {totalOrders}
           </div>
           <div className="mt-1 text-[11px] sm:text-xs text-slate-500 leading-snug">
-            Auto-synced to Google Sheets
+            Auto-synced to Cloud Storage
           </div>
         </div>
       </div>
