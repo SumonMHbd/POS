@@ -1712,6 +1712,8 @@ export default function App() {
               lang={lang}
               activeRole={effectiveRole}
               permissions={effectivePermissions}
+              authToken={authSession?.token}
+              shopPlan={currentShopPlan}
               onUpdateShopProfile={handleUpdateShopProfile}
               onCreateStaffLogin={handleCreateStaffLogin}
               onUpdateStaffLogin={handleUpdateStaffLogin}

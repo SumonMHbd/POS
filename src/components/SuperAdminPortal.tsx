@@ -60,11 +60,14 @@ import {
   createGoogleSheetForShopAdmin,
   createNewTenantShop,
   deleteTenantShop,
+  fetchLiveSheetData,
   fetchSuperAdminOverview,
   generateMonthlyInvoices,
   pullCredentialsFromMasterGoogleSheet,
   recordSubscriptionPayment,
   syncMasterAdminGoogleSheet,
+  updateMasterGoogleSheetUrl,
+  updateShopGoogleSheetUrl,
   updateSuperAdminSettings,
   updateTenantShop,
 } from '../lib/googleWorkspace';
@@ -686,7 +689,10 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     [overview, lang]
   );
 
-  const isSheetsConnected = Boolean(overview?.googleSheetsEngine.appsScriptWebAppUrl);
+  const masterSheetUrl =
+    overview?.googleSheetsEngine?.masterDirectorySheetUrl ||
+    'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
+  const isSheetsConnected = Boolean(masterSheetUrl);
 
   const superAdminNavItems: Array<{
     id: SuperAdminTab;
@@ -851,6 +857,22 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {masterSheetUrl && (
+              <a
+                href={masterSheetUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`min-h-[36px] inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/90 dark:bg-emerald-950/40 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 whitespace-nowrap shadow-xs ${NEU_TINT_BTN}`}
+                title={masterSheetUrl}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="hidden md:inline">
+                  {lang === 'bn' ? 'মাস্টার শিট' : 'Master Sheet'}
+                </span>
+                <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+              </a>
+            )}
+
             <button
               type="button"
               onClick={() => setShowCreateModal(true)}
@@ -947,6 +969,77 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
         {/* TAB 1: EXECUTIVE OVERVIEW & SUMMARY OF EVERY SHOP */}
         {!loading && overview && activeTab === 'overview' && (
           <div className="space-y-6 animate-view-enter">
+            {/* Prominent Super Admin Master Google Sheet Card — ALWAYS LINKED & VISIBLE */}
+            <div className="neu-box rounded-2xl border border-emerald-300/80 dark:border-emerald-700/70 bg-gradient-to-r from-emerald-50/95 via-teal-50/70 to-emerald-50/95 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-emerald-950/40 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-start gap-3.5 min-w-0">
+                <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <FileSpreadsheet className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {lang === 'bn'
+                        ? 'সুপার অ্যাডমিন সংযুক্ত মাস্টার Google Sheet'
+                        : 'Super Admin Connected Master Google Sheet'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {lang === 'bn' ? 'স্থায়ীভাবে সংযুক্ত' : 'Always Linked & Live'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
+                    <a
+                      href={masterSheetUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-emerald-700 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1 break-all"
+                      title={masterSheetUrl}
+                    >
+                      <span className="truncate max-w-[260px] sm:max-w-md">
+                        {masterSheetUrl}
+                      </span>
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(masterSheetUrl);
+                        onNotify(lang === 'bn' ? 'মাস্টার শিট লিঙ্ক কপি হয়েছে!' : 'Master Google Sheet URL copied!');
+                      }}
+                      className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300 underline cursor-pointer"
+                    >
+                      {lang === 'bn' ? 'কপি' : 'Copy Link'}
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {lang === 'bn'
+                      ? 'সকল দোকানের কেন্দ্রীয় ডিরেক্টরি, লগইন ক্রেডেনশিয়াল ও সাবস্ক্রিপশন ইনভয়েস এই শিটে সংরক্ষিত।'
+                      : 'Central directory for all shops, login credentials vault, and subscription billing mirrored in this sheet.'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={masterSheetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm ${NEU_SOLID_BTN}`}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>{lang === 'bn' ? 'শিট খুলুন ↗' : 'Open Google Sheet ↗'}</span>
+                </a>
+                <button
+                  type="button"
+                  disabled={busyMasterAction === 'sync'}
+                  onClick={handleSyncMasterSheetNow}
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 ${NEU_TINT_BTN}`}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${busyMasterAction === 'sync' ? 'animate-spin text-emerald-600' : ''}`} />
+                  <span>{busyMasterAction === 'sync' ? 'Syncing...' : 'Sync Now'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* 4 Tastefully Colored Minimal Executive KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Indigo KPI: Total Registered Shops */}
@@ -1200,10 +1293,46 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                   >
                                     {shop.status}
                                   </span>
+                                  {shop.sheetConfig.spreadsheetUrl ? (
+                                    <a
+                                      href={shop.sheetConfig.spreadsheetUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
+                                      title={shop.sheetConfig.spreadsheetUrl}
+                                    >
+                                      <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                      <span>Google Sheet ↗</span>
+                                    </a>
+                                  ) : null}
                                 </div>
                                 <div className="text-[11px] font-mono text-slate-500 mt-0.5 break-all sm:break-normal">
                                   {shop.ownerName} · {shop.ownerEmail} {shop.phone ? `· ${shop.phone}` : ''}
                                 </div>
+                                {shop.sheetConfig.spreadsheetUrl && (
+                                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
+                                    <FileSpreadsheet className="h-3 w-3 shrink-0" />
+                                    <a
+                                      href={shop.sheetConfig.spreadsheetUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="hover:underline truncate max-w-[200px]"
+                                      title={shop.sheetConfig.spreadsheetUrl}
+                                    >
+                                      {shop.sheetConfig.spreadsheetUrl}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
+                                        onNotify(lang === 'bn' ? 'দোকানের গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Shop Google Sheet URL copied!');
+                                      }}
+                                      className="text-[10px] text-slate-500 hover:text-emerald-600 underline font-sans cursor-pointer"
+                                    >
+                                      {lang === 'bn' ? 'কপি' : 'Copy'}
+                                    </button>
+                                  </div>
+                                )}
                                 <div className="text-[11px] text-slate-400 mt-0.5">
                                   {shop.businessType} · Staff: {shop.metrics.staffCount}
                                 </div>
@@ -1684,13 +1813,46 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                           >
                             · {shop.status}
                           </span>
+                          {shop.sheetConfig.spreadsheetUrl ? (
+                            <a
+                              href={shop.sheetConfig.spreadsheetUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
+                              title={shop.sheetConfig.spreadsheetUrl}
+                            >
+                              <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>Google Sheet ↗</span>
+                            </a>
+                          ) : null}
                         </div>
-                        <div className="text-xs font-mono text-slate-500 break-words">
+                        <div className="text-xs font-mono text-slate-500 break-words flex items-center gap-1.5 flex-wrap">
                           <span className="break-all sm:break-normal">{shop.ownerEmail}</span> · Fee:{' '}
                           <strong className="text-slate-800 dark:text-slate-200 whitespace-nowrap">
                             {formatBDT(shop.monthlySubscriptionFee)}/mo
                           </strong>{' '}
-                          ({shop.billingStatus})
+                          <span>({shop.billingStatus})</span>
+                          {overview.invoices.some((i) => i.shopId === shop.shopId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const inv = overview.invoices.find((i) => i.shopId === shop.shopId);
+                                if (inv) {
+                                  downloadSubscriptionInvoicePdf({
+                                    invoice: inv,
+                                    shop,
+                                    superAdminEmail: overview.superAdminProfile.email,
+                                  });
+                                  onNotify(lang === 'bn' ? 'সাবস্ক্রিপশন ইনভয়েস PDF ডাউনলোড হচ্ছে...' : 'Downloading subscription invoice PDF...');
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300 cursor-pointer shadow-2xs"
+                              title={lang === 'bn' ? 'দোকানের সাবস্ক্রিপশন ইনভয়েস PDF ডাউনলোড' : 'Download Shop Subscription Invoice PDF'}
+                            >
+                              <Download className="h-3 w-3 text-emerald-600" />
+                              <span>{lang === 'bn' ? 'ইনভয়েস PDF' : 'Invoice PDF'}</span>
+                            </button>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500">
                           SKUs: <strong className="font-mono">{shop.metrics.skuCount}</strong> ·

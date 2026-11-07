@@ -183,11 +183,13 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                   {receiptSale.date} {receiptSale.timestamp ? receiptSale.timestamp.slice(11, 16) : ''}
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  Cashier: {receiptSale.cashierName || 'Staff'} · {receiptSale.paymentMethod}
+                  Cashier: {receiptSale.cashierName || 'Staff'}
+                  {receiptSale.sellerPhone ? ` · Tel: ${receiptSale.sellerPhone}` : ''} · {receiptSale.paymentMethod}
                 </div>
-                {receiptSale.customerName && (
+                {(receiptSale.customerName || receiptSale.customerPhone) && (
                   <div className="mt-1 text-[11px] font-semibold text-slate-800">
-                    Customer: {receiptSale.customerName} ({receiptSale.customerPhone || 'N/A'})
+                    Customer: {receiptSale.customerName || 'Walk-in'}
+                    {receiptSale.customerPhone ? ` (${receiptSale.customerPhone})` : ''}
                   </div>
                 )}
               </div>
@@ -321,6 +323,9 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                   </div>
                   <div className="text-xs text-slate-700">
                     Cashier: <span className="font-medium text-slate-900">{receiptSale.cashierName || 'Staff'}</span>
+                    {receiptSale.sellerPhone && (
+                      <span className="font-mono text-slate-500 ml-1.5">(Tel: {receiptSale.sellerPhone})</span>
+                    )}
                   </div>
                   <div className="text-xs">
                     Status:{' '}

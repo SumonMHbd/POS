@@ -3,6 +3,7 @@ import {
   type AdminCredentialVaultItem,
   type AuditLogEntry,
   type AuthSessionUser,
+  type CreditHistoryEntry,
   type PlatformGoogleSheetsEngineConfig,
   type PosStoreState,
   type SheetConnectionConfig,
@@ -259,14 +260,15 @@ async function createSeededStaticDb(): Promise<StaticPlatformDatabase> {
       Custom: 750,
     },
     googleSheetsEngine: {
-      appsScriptWebAppUrl: '',
-      sharedSecret: '',
-      masterDirectorySheetUrl: '',
-      masterSpreadsheetId: '',
-      masterSpreadsheetTitle: '',
+      appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
+      sharedSecret: 'mhs_secure_vault_token_2026',
+      masterDirectorySheetUrl:
+        'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
+      masterSpreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+      masterSpreadsheetTitle: 'MHS POS Master Directory & Super Admin Vault',
       autoCreateSheetForNewShop: true,
-      lastConnectedAt: null,
-      lastMasterSyncedAt: null,
+      lastConnectedAt: new Date().toISOString(),
+      lastMasterSyncedAt: new Date().toISOString(),
     },
     users,
     shops,
@@ -458,7 +460,7 @@ function serializeShopWorkbookTabs(state: PosStoreState): Record<string, unknown
 
   const allCreditHistory = state.credits
     .flatMap((c) =>
-      ensureCustomerCreditHistory(c).map((h) => ({
+      ensureCustomerCreditHistory(c).map((h: CreditHistoryEntry) => ({
         ...h,
         customerName: c.name,
         customerPhone: c.phone,
@@ -968,6 +970,106 @@ export async function handleStaticHostApiRequest<T>(
       updatedUsersCount: 0,
       addedUsersCount: 0,
       message: 'Local credentials verified.',
+    } as T;
+  }
+
+  if (cleanPath === '/api/superadmin/master-sheet/update-url' && method === 'POST') {
+    const raw = String(body.masterSheetUrl || '').trim();
+    if (raw) {
+      db.googleSheetsEngine.masterDirectorySheetUrl = raw;
+      saveStaticDb(db);
+    }
+    return {
+      ok: true,
+      message: 'Master Google Sheet URL updated.',
+      googleSheetsEngine: db.googleSheetsEngine,
+    } as T;
+  }
+
+  if (cleanPath.startsWith('/api/superadmin/shops/') && cleanPath.endsWith('/update-sheet-url') && method === 'POST') {
+    const parts = cleanPath.split('/');
+    const shopId = parts[4];
+    const raw = String(body.sheetUrl || '').trim();
+    if (shopId && db.shops[shopId]) {
+      db.shops[shopId].posState.sheetConfig = {
+        spreadsheetId: raw,
+        spreadsheetUrl: raw,
+        spreadsheetTitle: `${db.shops[shopId].posState.shopNameEn || shopId} Sheet`,
+        status: raw ? 'connected' : 'disconnected',
+        lastSyncedAt: new Date().toISOString(),
+      };
+      saveStaticDb(db);
+    }
+    return {
+      ok: true,
+      message: 'Shop Google Sheet URL updated.',
+      sheetConfig: db.shops[shopId]?.posState.sheetConfig,
+    } as T;
+  }
+
+  if (cleanPath === '/api/superadmin/live-sheet-data' && method === 'GET') {
+    const masterTabs: Record<string, (string | number)[][]> = {
+      Shops_Directory: [
+        ['Shop ID', 'Name (BN)', 'Name (EN)', 'Owner', 'Email', 'Phone', 'Plan', 'Monthly Fee', 'Status', 'Sheet URL'],
+        ...Object.values(db.shops).map((s) => [
+          s.shopId,
+          s.posState.shopNameBn,
+          s.posState.shopNameEn,
+          s.ownerName,
+          s.ownerEmail,
+          s.posState.phone || '',
+          s.plan,
+          s.monthlySubscriptionFee,
+          s.status,
+          s.posState.sheetConfig?.spreadsheetUrl || '',
+        ]),
+      ],
+      Invoices: [
+        ['Invoice ID', 'Shop ID', 'Shop Name', 'Month', 'Amount', 'Status', 'Due Date', 'Paid At'],
+        ...db.invoices.map((inv) => [
+          inv.id,
+          inv.shopId,
+          inv.shopNameBn,
+          inv.monthKey,
+          inv.amount,
+          inv.status,
+          inv.dueDate,
+          inv.paidAt || '',
+        ]),
+      ],
+    };
+    return {
+      ok: true,
+      masterTabs,
+      shopWorkbooks: {},
+      lastSyncedAt: new Date().toISOString(),
+      masterSheetUrl: db.googleSheetsEngine.masterDirectorySheetUrl,
+    } as T;
+  }
+
+  // Shop Subscription Invoices
+  if (cleanPath === '/api/shop/subscription-invoices' && method === 'GET') {
+    const shopId = actor.shopId;
+    const shopInvoices = db.invoices.filter((i) => i.shopId === shopId);
+    const shop = shopId ? db.shops[shopId] : undefined;
+    return {
+      invoices: shopInvoices,
+      shop: shop
+        ? {
+            shopId: shop.shopId,
+            shopNameBn: shop.posState.shopNameBn,
+            shopNameEn: shop.posState.shopNameEn,
+            businessType: shop.posState.businessType,
+            address: shop.posState.address,
+            phone: shop.posState.phone,
+            ownerName: shop.ownerName,
+            ownerEmail: shop.ownerEmail,
+            plan: shop.plan,
+            monthlySubscriptionFee: shop.monthlySubscriptionFee,
+            billingStatus: shop.billingStatus,
+            nextBillingDate: shop.nextBillingDate,
+          }
+        : null,
     } as T;
   }
 

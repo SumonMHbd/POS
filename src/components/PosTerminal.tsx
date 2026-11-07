@@ -16,6 +16,7 @@ import {
   Smartphone,
   Sparkles,
   Trash2,
+  User,
   UserPlus,
   Wallet,
   X,
@@ -80,18 +81,22 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [customCustomerName, setCustomCustomerName] = useState('');
   const [customCustomerPhone, setCustomCustomerPhone] = useState('');
+  const [customSellerPhone, setCustomSellerPhone] = useState('');
   const [paidInput, setPaidInput] = useState<string>('');
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(false);
   const paymentDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Enterprise Subscription Gate for Barcode Scanner
-  const isEnterprise = shopPlan === 'Enterprise' || Boolean(entitlements?.enableBarcodeScanner);
+  // Barcode Scanner Gate (Available on Business & Enterprise tiers or when entitled)
+  const canScanBarcode =
+    shopPlan === 'Enterprise' ||
+    shopPlan === 'Business' ||
+    Boolean(entitlements?.enableBarcodeScanner);
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   const [showEnterpriseUpgradeHint, setShowEnterpriseUpgradeHint] = useState(false);
 
   const handleOpenBarcodeScanner = () => {
-    if (isEnterprise) {
+    if (canScanBarcode) {
       setBarcodeModalOpen(true);
     } else {
       setShowEnterpriseUpgradeHint(true);
@@ -258,6 +263,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
       customerId: existingCust?.id,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
+      sellerPhone: customSellerPhone.trim() || undefined,
       cashierName,
     };
 
@@ -275,6 +281,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
     setSelectedCustomerId('');
     setCustomCustomerName('');
     setCustomCustomerPhone('');
+    setCustomSellerPhone('');
     setMobileCartOpen(false);
   };
 
@@ -556,49 +563,99 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
           </div>
         </div>
 
-        {(dueAmount > 0 || selectedCustomerId || customCustomerName) && (
-          <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/25 p-2.5 space-y-1.5 animate-dropdown-pop">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-900 dark:text-amber-300 min-w-0">
-              <UserPlus className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate whitespace-nowrap">
+        {/* Name & Phone Number Fields (Optional Receipt Info & Credit Customer) */}
+        <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-2.5 space-y-2">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+            <span className="flex items-center gap-1.5 min-w-0">
+              <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="truncate">
                 {lang === 'bn'
-                  ? 'বাকিদার ক্রেতার নাম নির্বাচন বা যোগ করুন *'
-                  : 'Select or Enter Credit Customer *'}
+                  ? 'রসিদের নাম ও ফোন নম্বর (ঐচ্ছিক)'
+                  : 'Name & Phone Number (Optional Receipt)'}
               </span>
-            </div>
+            </span>
+            {dueAmount > 0 && (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold shrink-0">
+                {lang === 'bn' ? '* বাকির জন্য নাম আবশ্যক' : '* Required for Credit'}
+              </span>
+            )}
+          </div>
+
+          {credits.length > 0 && (
             <select
               value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="w-full min-h-[34px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs"
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedCustomerId(val);
+                if (val) {
+                  const found = credits.find((c) => c.id === val);
+                  if (found) {
+                    setCustomCustomerName(found.name);
+                    setCustomCustomerPhone(found.phone);
+                  }
+                }
+              }}
+              className="w-full min-h-[32px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
             >
-              <option value="">{lang === 'bn' ? '— নতুন ক্রেতা লিখুন —' : '— New Customer —'}</option>
+              <option value="">
+                {lang === 'bn' ? '— নিয়মিত বাকিদার তালিকা থেকে বাছুন —' : '— Or Select Existing Customer —'}
+              </option>
               {credits.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.phone}) — Due {formatBDT(c.balanceDue)}
                 </option>
               ))}
             </select>
+          )}
 
-            {!selectedCustomerId && (
-              <div className="grid grid-cols-2 gap-1.5">
-                <input
-                  type="text"
-                  placeholder={t.customerName}
-                  value={customCustomerName}
-                  onChange={(e) => setCustomCustomerName(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs"
-                />
-                <input
-                  type="text"
-                  placeholder={t.customerPhone}
-                  value={customCustomerPhone}
-                  onChange={(e) => setCustomCustomerPhone(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-mono"
-                />
-              </div>
-            )}
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">
+                {lang === 'bn' ? 'নাম (ঐচ্ছিক)' : 'Name (Optional)'}
+              </label>
+              <input
+                type="text"
+                placeholder={lang === 'bn' ? 'ক্রেতা বা বিক্রয়কারী' : 'Customer or Seller'}
+                value={customCustomerName}
+                onChange={(e) => {
+                  setCustomCustomerName(e.target.value);
+                  if (selectedCustomerId) setSelectedCustomerId('');
+                }}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-0.5">
+                {lang === 'bn' ? 'ফোন নম্বর (ঐচ্ছিক)' : 'Phone (Optional)'}
+              </label>
+              <input
+                type="text"
+                placeholder={lang === 'bn' ? '017XXXXXXXX' : '017XXXXXXXX'}
+                value={customCustomerPhone}
+                onChange={(e) => {
+                  setCustomCustomerPhone(e.target.value);
+                  if (selectedCustomerId) setSelectedCustomerId('');
+                }}
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400"
+              />
+            </div>
           </div>
-        )}
+
+          {/* Seller / Cashier Contact Tag on Receipt */}
+          <div className="pt-0.5 flex items-center justify-between text-[11px] text-slate-500">
+            <span className="truncate">
+              {lang === 'bn' ? 'বিক্রয়কারী:' : 'Sold By:'} <strong className="text-slate-700 dark:text-slate-300">{cashierName}</strong>
+            </span>
+            <input
+              type="text"
+              placeholder={lang === 'bn' ? 'বিক্রেতার ফোন (ঐচ্ছিক)' : 'Seller Phone (opt)'}
+              value={customSellerPhone}
+              onChange={(e) => setCustomSellerPhone(e.target.value)}
+              className="w-36 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-right"
+              title={lang === 'bn' ? 'রসিদে বিক্রয়কারীর ফোন নম্বর যুক্ত করুন' : 'Include seller phone on receipt'}
+            />
+          </div>
+        </div>
 
         {/* Total Summary & Complete Sale */}
         {!isMobilePopup && (

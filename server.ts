@@ -13,6 +13,7 @@ import {
   UserRole,
   type AdminCredentialVaultItem,
   type AuditLogEntry,
+  type CreditHistoryEntry,
   type EcommerceOrder,
   type PlatformGoogleSheetsEngineConfig,
   type PosStoreState,
@@ -29,6 +30,15 @@ import {
   type WorkspaceTab,
 } from './src/types/pos.ts';
 import {
+  DEFAULT_MASTER_SHEET_URL,
+  DEFAULT_MASTER_SPREADSHEET_ID,
+  DEFAULT_MASTER_SPREADSHEET_TITLE,
+  DEMO_CUSTOMER_CREDITS,
+  DEMO_ELECTRONICS_PRODUCTS,
+  DEMO_ELECTRONICS_SALES,
+  DEMO_EXPENSES,
+  DEMO_SEASONAL_HISTORY,
+  DEMO_SHOP_SHEET_CONFIG,
   buildDefaultPosStore,
   buildFreshShopStore,
   ensureCustomerCreditHistory,
@@ -490,7 +500,7 @@ function serializeShopWorkbookTabs(state: PosStoreState) {
   // Chronological Customer Due & Installment Payment History
   const allCreditHistory = state.credits
     .flatMap((c) =>
-      ensureCustomerCreditHistory(c).map((h) => ({
+      ensureCustomerCreditHistory(c).map((h: CreditHistoryEntry) => ({
         ...h,
         customerName: c.name,
         customerPhone: c.phone,
@@ -729,14 +739,14 @@ function buildInitialPlatformDatabase(): PlatformDatabase {
       Custom: 750,
     },
     googleSheetsEngine: {
-      appsScriptWebAppUrl: '',
-      sharedSecret: '',
-      masterDirectorySheetUrl: '',
-      masterSpreadsheetId: '',
-      masterSpreadsheetTitle: '',
+      appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
+      sharedSecret: 'mhs_secure_vault_token_2026',
+      masterDirectorySheetUrl: DEFAULT_MASTER_SHEET_URL,
+      masterSpreadsheetId: DEFAULT_MASTER_SPREADSHEET_ID,
+      masterSpreadsheetTitle: DEFAULT_MASTER_SPREADSHEET_TITLE,
       autoCreateSheetForNewShop: true,
-      lastConnectedAt: null,
-      lastMasterSyncedAt: null,
+      lastConnectedAt: new Date().toISOString(),
+      lastMasterSyncedAt: new Date().toISOString(),
     },
     users,
     shops,
@@ -767,6 +777,62 @@ function loadDatabase(): PlatformDatabase {
       const parsed = JSON.parse(raw) as PlatformDatabase;
       if (parsed && parsed.users && parsed.shops) {
         let migrated = false;
+
+        // Ensure Super Admin Master Google Sheet is ALWAYS linked
+        if (!parsed.googleSheetsEngine) {
+          parsed.googleSheetsEngine = {
+            appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
+            sharedSecret: 'mhs_secure_vault_token_2026',
+            masterDirectorySheetUrl: DEFAULT_MASTER_SHEET_URL,
+            masterSpreadsheetId: DEFAULT_MASTER_SPREADSHEET_ID,
+            masterSpreadsheetTitle: DEFAULT_MASTER_SPREADSHEET_TITLE,
+            autoCreateSheetForNewShop: true,
+            lastConnectedAt: new Date().toISOString(),
+            lastMasterSyncedAt: new Date().toISOString(),
+          };
+          migrated = true;
+        } else if (!parsed.googleSheetsEngine.masterDirectorySheetUrl || !parsed.googleSheetsEngine.masterDirectorySheetUrl.trim()) {
+          parsed.googleSheetsEngine.masterDirectorySheetUrl = DEFAULT_MASTER_SHEET_URL;
+          parsed.googleSheetsEngine.masterSpreadsheetId = DEFAULT_MASTER_SPREADSHEET_ID;
+          parsed.googleSheetsEngine.masterSpreadsheetTitle = DEFAULT_MASTER_SPREADSHEET_TITLE;
+          parsed.googleSheetsEngine.lastConnectedAt = new Date().toISOString();
+          migrated = true;
+        }
+
+        // Ensure My Electronics Shop (shop-main) has full demo data and connected Google Sheet URL
+        const demoShop = parsed.shops['shop-main'];
+        if (demoShop && demoShop.posState) {
+          if (!demoShop.posState.products || demoShop.posState.products.length === 0) {
+            demoShop.posState.products = DEMO_ELECTRONICS_PRODUCTS.map((p) => ({ ...p }));
+            demoShop.posState.sales = DEMO_ELECTRONICS_SALES.map((s) => ({
+              ...s,
+              items: s.items.map((i) => ({ ...i })),
+            }));
+            demoShop.posState.credits = DEMO_CUSTOMER_CREDITS.map((c) => ({
+              ...c,
+              history: c.history ? c.history.map((h) => ({ ...h })) : [],
+            }));
+            demoShop.posState.expenses = DEMO_EXPENSES.map((e) => ({ ...e }));
+            demoShop.posState.seasonalHistory = DEMO_SEASONAL_HISTORY.map((m) => ({ ...m }));
+            migrated = true;
+          }
+          if (!demoShop.posState.sheetConfig || !demoShop.posState.sheetConfig.spreadsheetUrl) {
+            demoShop.posState.sheetConfig = { ...DEMO_SHOP_SHEET_CONFIG };
+            migrated = true;
+          }
+          if (!demoShop.entitlements?.enableBarcodeScanner) {
+            demoShop.entitlements = {
+              ...demoShop.entitlements,
+              enableEcommerce: true,
+              enableCreditLedger: true,
+              enableAuditExports: true,
+              enableBarcodeScanner: true,
+              maxStaffAccounts: demoShop.entitlements?.maxStaffAccounts || 15,
+            };
+            migrated = true;
+          }
+        }
+
         for (const u of parsed.users) {
           if (!u.vaultPasswordCipher) {
             if (u.id === 'user-superadmin-1' && verifyPassword('admin1234', u.passwordSalt, u.passwordHash)) {
@@ -1786,6 +1852,84 @@ async function startServer() {
     });
   });
 
+  // Super Admin: Direct update of Master Google Sheet URL without requiring Apps Script
+  app.post('/api/superadmin/master-sheet/update-url', requireSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
+    const { masterSheetUrl } = req.body || {};
+    const raw = String(masterSheetUrl || '').trim();
+    if (!raw) {
+      res.status(400).json({ error: 'Valid Google Sheet URL or Spreadsheet ID is required.' });
+      return;
+    }
+    const extractedId = extractSpreadsheetIdFromInput(raw);
+    const finalUrl = raw.includes('http')
+      ? raw
+      : `https://docs.google.com/spreadsheets/d/${extractedId}/edit`;
+
+    db.googleSheetsEngine.masterSpreadsheetId = extractedId;
+    db.googleSheetsEngine.masterDirectorySheetUrl = finalUrl;
+    db.googleSheetsEngine.lastConnectedAt = new Date().toISOString();
+    saveDatabase(db);
+
+    res.json({
+      ok: true,
+      message: 'Master Google Sheet URL updated successfully.',
+      googleSheetsEngine: db.googleSheetsEngine,
+    });
+  });
+
+  // Super Admin: Direct update of a shop's Google Sheet URL
+  app.post('/api/superadmin/shops/:shopId/update-sheet-url', requireSuperAdmin, (req: AuthenticatedRequest, res: Response) => {
+    const shopId = req.params.shopId;
+    const { sheetUrl } = req.body || {};
+    const shop = db.shops[shopId];
+    if (!shop) {
+      res.status(404).json({ error: 'Shop not found.' });
+      return;
+    }
+    const raw = String(sheetUrl || '').trim();
+    const extractedId = raw ? extractSpreadsheetIdFromInput(raw) : '';
+    const finalUrl = raw
+      ? raw.includes('http')
+        ? raw
+        : `https://docs.google.com/spreadsheets/d/${extractedId}/edit`
+      : '';
+
+    shop.posState.sheetConfig = {
+      spreadsheetId: extractedId,
+      spreadsheetUrl: finalUrl,
+      spreadsheetTitle: `${shop.posState.shopNameEn || shop.shopId} Sheet`,
+      status: finalUrl ? 'connected' : 'disconnected',
+      lastSyncedAt: new Date().toISOString(),
+    };
+    saveDatabase(db);
+
+    res.json({
+      ok: true,
+      message: `Shop "${shop.posState.shopNameEn}" Google Sheet URL updated.`,
+      sheetConfig: shop.posState.sheetConfig,
+    });
+  });
+
+  // Super Admin: Fetch Real-Time Serialized Sheet Data for In-App Live Spreadsheet Viewer
+  app.get('/api/superadmin/live-sheet-data', requireSuperAdmin, (_req: AuthenticatedRequest, res: Response) => {
+    const masterTabs = serializeMasterPlatformTabs(db);
+    // Also include each shop's serialized workbook
+    const shopWorkbooks: Record<string, { shopName: string; tabs: Record<string, string[][]> }> = {};
+    for (const [sId, s] of Object.entries(db.shops)) {
+      shopWorkbooks[sId] = {
+        shopName: `${s.posState.shopNameBn} (${s.posState.shopNameEn})`,
+        tabs: serializeShopWorkbookTabs(s.posState),
+      };
+    }
+    res.json({
+      ok: true,
+      masterTabs,
+      shopWorkbooks,
+      lastSyncedAt: db.googleSheetsEngine.lastMasterSyncedAt || new Date().toISOString(),
+      masterSheetUrl: db.googleSheetsEngine.masterDirectorySheetUrl,
+    });
+  });
+
   // Super Admin: Pull / Update Admin & Shop Passwords Edited Directly in Master Google Sheet
   app.post('/api/superadmin/master-sheet/pull', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const masterId =
@@ -2464,6 +2608,36 @@ async function startServer() {
     saveDatabase(db);
     syncMasterSheetInBackground(db);
     res.json({ createdCount, invoices: db.invoices });
+  });
+
+  // Shop Owner / Staff: Fetch Shop's Subscription Invoices & Plan Status
+  app.get('/api/shop/subscription-invoices', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const shopId = req.authUser!.shopId;
+    if (!shopId) {
+      res.status(400).json({ error: 'Shop ID required.' });
+      return;
+    }
+    const shopInvoices = db.invoices.filter((i) => i.shopId === shopId);
+    const shop = db.shops[shopId];
+    res.json({
+      invoices: shopInvoices,
+      shop: shop
+        ? {
+            shopId: shop.shopId,
+            shopNameBn: shop.posState.shopNameBn,
+            shopNameEn: shop.posState.shopNameEn,
+            businessType: shop.posState.businessType,
+            address: shop.posState.address,
+            phone: shop.posState.phone,
+            ownerName: shop.ownerName,
+            ownerEmail: shop.ownerEmail,
+            plan: shop.plan,
+            monthlySubscriptionFee: shop.monthlySubscriptionFee,
+            billingStatus: shop.billingStatus,
+            nextBillingDate: shop.nextBillingDate,
+          }
+        : null,
+    });
   });
 
   // Super Admin: Platform Settings, Announcement, Credentials & Google Sheets Engine

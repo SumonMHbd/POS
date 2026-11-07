@@ -526,3 +526,56 @@ export async function pullShopSheetData(token: string, shopId: string) {
     body: JSON.stringify({ shopId }),
   });
 }
+
+export async function fetchShopSubscriptionInvoices(token: string) {
+  return apiFetch<{
+    invoices: SubscriptionInvoiceRecord[];
+    shop: {
+      shopId: string;
+      shopNameBn: string;
+      shopNameEn: string;
+      businessType: string;
+      address: string;
+      phone: string;
+      ownerName: string;
+      ownerEmail: string;
+      plan: ShopSubscriptionPlan;
+      monthlySubscriptionFee: number;
+      billingStatus: string;
+      nextBillingDate: string;
+    } | null;
+  }>('/api/shop/subscription-invoices', token);
+}
+
+export async function updateMasterGoogleSheetUrl(token: string, masterSheetUrl: string) {
+  return apiFetch<{ ok: boolean; message: string; googleSheetsEngine: PlatformGoogleSheetsEngineConfig }>(
+    '/api/superadmin/master-sheet/update-url',
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ masterSheetUrl }),
+    }
+  );
+}
+
+export async function updateShopGoogleSheetUrl(token: string, shopId: string, sheetUrl: string) {
+  return apiFetch<{ ok: boolean; message: string; sheetConfig: SheetConnectionConfig }>(
+    `/api/superadmin/shops/${encodeURIComponent(shopId)}/update-sheet-url`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sheetUrl }),
+    }
+  );
+}
+
+export async function fetchLiveSheetData(token: string) {
+  return apiFetch<{
+    ok: boolean;
+    masterTabs: Record<string, (string | number)[][]>;
+    shopWorkbooks: Record<string, { shopName: string; tabs: Record<string, (string | number)[][]> }>;
+    lastSyncedAt: string;
+    masterSheetUrl: string;
+  }>('/api/superadmin/live-sheet-data', token);
+}
+

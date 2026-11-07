@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Coins,
   Download,
   Edit3,
   FileText,
   History,
+  Receipt,
   Shield,
   Store,
   Trash2,
@@ -15,8 +17,10 @@ import {
   type AuditLogEntry,
   type LanguageCode,
   type PosStoreState,
+  type ShopSubscriptionPlan,
   type StaffDashboardPermissions,
   type StaffMember,
+  type SubscriptionInvoiceRecord,
   type WorkspaceTab,
 } from '../types/pos';
 import { getDefaultPermissionsForRole } from '../lib/storeDefaults';
@@ -27,6 +31,9 @@ import {
   exportMonthlyAuditCsv,
   exportSalesHistoryCsv,
 } from '../lib/exportReports';
+import { formatBDT } from '../i18n/translations';
+import { downloadSubscriptionInvoicePdf } from '../lib/pdfGenerator';
+import { fetchShopSubscriptionInvoices } from '../lib/googleWorkspace';
 import { AppPopupModal } from './AppPopupModal';
 
 interface ReportsAndAdminViewProps {
@@ -34,6 +41,8 @@ interface ReportsAndAdminViewProps {
   lang: LanguageCode;
   activeRole: UserRole;
   permissions?: StaffDashboardPermissions;
+  authToken?: string;
+  shopPlan?: ShopSubscriptionPlan;
   onUpdateShopProfile: (patch: {
     shopNameBn: string;
     shopNameEn: string;
@@ -78,6 +87,8 @@ export const ReportsAndAdminView: React.FC<ReportsAndAdminViewProps> = ({
   lang,
   activeRole,
   permissions,
+  authToken,
+  shopPlan = 'Business',
   onUpdateShopProfile,
   onCreateStaffLogin,
   onUpdateStaffLogin,
@@ -91,6 +102,42 @@ export const ReportsAndAdminView: React.FC<ReportsAndAdminViewProps> = ({
     : activeRole === UserRole.OWNER ||
       activeRole === UserRole.SUPER_ADMIN ||
       activeRole === UserRole.MANAGER;
+
+  // Subscription Invoices & Billing State
+  const [subInvoices, setSubInvoices] = useState<SubscriptionInvoiceRecord[]>([]);
+  const [billingMeta, setBillingMeta] = useState<{
+    plan: ShopSubscriptionPlan;
+    monthlySubscriptionFee: number;
+    billingStatus: string;
+    nextBillingDate: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!authToken) return;
+    let cancelled = false;
+    fetchShopSubscriptionInvoices(authToken)
+      .then((res) => {
+        if (!cancelled && res) {
+          if (Array.isArray(res.invoices)) {
+            setSubInvoices(res.invoices);
+          }
+          if (res.shop) {
+            setBillingMeta({
+              plan: res.shop.plan,
+              monthlySubscriptionFee: res.shop.monthlySubscriptionFee,
+              billingStatus: res.shop.billingStatus,
+              nextBillingDate: res.shop.nextBillingDate,
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed loading shop subscription invoices:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken]);
 
   // Shop Profile Form State
   const [shopNameBn, setShopNameBn] = useState(state.shopNameBn);
@@ -572,87 +619,225 @@ export const ReportsAndAdminView: React.FC<ReportsAndAdminViewProps> = ({
           )}
         </div>
 
-        {/* Right 4 Cols: Shop Profile Settings */}
-        <form
-          onSubmit={handleSaveProfile}
-          className="neu-box-static lg:col-span-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-4 text-xs"
-        >
-          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 min-w-0">
-            <Store className="h-4 w-4 text-emerald-600 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
-                {lang === 'bn' ? 'দোকানের নাম ও প্রোফাইল সেটিংস' : 'Shop Profile & Receipt Header'}
-              </h2>
-              <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                {lang === 'bn'
-                  ? 'রশিদ এবং রিপোর্টে ব্যবহৃত দোকানের তথ্য এডিট করুন'
-                  : 'Customize shop name, phone, and address shown on receipts'}
-              </p>
+        {/* Right 4 Cols: Shop Profile Settings & Subscription Invoices */}
+        <div className="lg:col-span-4 space-y-5">
+          <form
+            onSubmit={handleSaveProfile}
+            className="neu-box-static rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-4 text-xs"
+          >
+            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 min-w-0">
+              <Store className="h-4 w-4 text-emerald-600 shrink-0" />
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                  {lang === 'bn' ? 'দোকানের নাম ও প্রোফাইল সেটিংস' : 'Shop Profile & Receipt Header'}
+                </h2>
+                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                  {lang === 'bn'
+                    ? 'রশিদ এবং রিপোর্টে ব্যবহৃত দোকানের তথ্য এডিট করুন'
+                    : 'Customize shop name, phone, and address shown on receipts'}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium mb-1">দোকানের নাম (বাংলা)</label>
-              <input
-                type="text"
-                disabled={!canManageShopAndStaff}
-                value={shopNameBn}
-                onChange={(e) => setShopNameBn(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
-              />
+            <div className="space-y-3">
+              <div>
+                <label className="block font-medium mb-1">দোকানের নাম (বাংলা)</label>
+                <input
+                  type="text"
+                  disabled={!canManageShopAndStaff}
+                  value={shopNameBn}
+                  onChange={(e) => setShopNameBn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Shop Name (English)</label>
+                <input
+                  type="text"
+                  disabled={!canManageShopAndStaff}
+                  value={shopNameEn}
+                  onChange={(e) => setShopNameEn(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Business Type</label>
+                <input
+                  type="text"
+                  disabled={!canManageShopAndStaff}
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  disabled={!canManageShopAndStaff}
+                  value={shopPhone}
+                  onChange={(e) => setShopPhone(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-mono disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Shop Address</label>
+                <input
+                  type="text"
+                  disabled={!canManageShopAndStaff}
+                  value={shopAddress}
+                  onChange={(e) => setShopAddress(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block font-medium mb-1">Shop Name (English)</label>
-              <input
-                type="text"
-                disabled={!canManageShopAndStaff}
-                value={shopNameEn}
-                onChange={(e) => setShopNameEn(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
-              />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Business Type</label>
-              <input
-                type="text"
-                disabled={!canManageShopAndStaff}
-                value={businessType}
-                onChange={(e) => setBusinessType(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
-              />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Phone Number</label>
-              <input
-                type="text"
-                disabled={!canManageShopAndStaff}
-                value={shopPhone}
-                onChange={(e) => setShopPhone(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 font-mono disabled:opacity-60"
-              />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Shop Address</label>
-              <input
-                type="text"
-                disabled={!canManageShopAndStaff}
-                value={shopAddress}
-                onChange={(e) => setShopAddress(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 disabled:opacity-60"
-              />
-            </div>
-          </div>
 
+            {canManageShopAndStaff && (
+              <button
+                type="submit"
+                className="min-h-[40px] w-full rounded-lg bg-slate-900 dark:bg-emerald-600 text-white font-semibold py-2 hover:opacity-90 cursor-pointer"
+              >
+                {lang === 'bn' ? 'দোকানের তথ্য সংরক্ষণ করুন' : 'Save Shop Profile'}
+              </button>
+            )}
+          </form>
+
+          {/* Shop SaaS Subscription & Invoices Card */}
           {canManageShopAndStaff && (
-            <button
-              type="submit"
-              className="min-h-[40px] w-full rounded-lg bg-slate-900 dark:bg-emerald-600 text-white font-semibold py-2 hover:opacity-90"
-            >
-              {lang === 'bn' ? 'দোকানের তথ্য সংরক্ষণ করুন' : 'Save Shop Profile'}
-            </button>
+            <div className="neu-box-static rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-3.5 text-xs">
+              <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 min-w-0">
+                <Receipt className="h-4 w-4 text-emerald-600 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                    {lang === 'bn' ? 'সাবস্ক্রিপশন ও বিলিং রসিদ' : 'Subscription & Invoices'}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                    {lang === 'bn'
+                      ? 'মাসিক সফটওয়্যার সাবস্ক্রিপশন ও অফিশিয়াল PDF ইনভয়েস'
+                      : 'Monthly POS SaaS plan details & official invoice PDF download'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/60 dark:bg-emerald-950/30 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">
+                    {lang === 'bn' ? 'বর্তমান প্যাকেজ:' : 'Active Plan:'}
+                  </span>
+                  <span className="rounded-md bg-emerald-600 text-white font-bold px-2 py-0.5 text-[11px]">
+                    {billingMeta?.plan || shopPlan || 'Business'} Plan
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-500">
+                    {lang === 'bn' ? 'মাসিক ফি:' : 'Monthly Fee:'}
+                  </span>
+                  <strong className="font-mono text-slate-800 dark:text-slate-200">
+                    {formatBDT(billingMeta?.monthlySubscriptionFee ?? 1000)}/mo
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-500">
+                    {lang === 'bn' ? 'পেমেন্ট স্ট্যাটাস:' : 'Billing Status:'}
+                  </span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                    {billingMeta?.billingStatus || 'Paid'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  {lang === 'bn' ? 'মাসিক ইনভয়েসসমূহ:' : 'Monthly Invoices:'}
+                </div>
+                {subInvoices.length > 0 ? (
+                  <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                    {subInvoices.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-2.5 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                            <span>{inv.monthKey}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${
+                                inv.status === 'Paid'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                              }`}
+                            >
+                              {inv.status}
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                            {formatBDT(inv.amount)} · #{inv.receiptNo || inv.id}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadSubscriptionInvoicePdf({
+                              invoice: inv,
+                              shop: {
+                                shopId: state.shopId,
+                                shopNameBn: state.shopNameBn,
+                                shopNameEn: state.shopNameEn,
+                                businessType: state.businessType,
+                                address: state.address,
+                                phone: state.phone,
+                                ownerName: state.staff.find((s) => s.role === UserRole.OWNER)?.name || 'Shop Owner',
+                                ownerEmail: state.staff.find((s) => s.role === UserRole.OWNER)?.email || '',
+                                status: 'Active',
+                                plan: inv.plan,
+                                monthlySubscriptionFee: inv.amount,
+                                billingStatus: inv.status,
+                                nextBillingDate: '',
+                                createdAt: '',
+                                entitlements: {
+                                  enableEcommerce: true,
+                                  enableCreditLedger: true,
+                                  enableAuditExports: true,
+                                  maxStaffAccounts: 15,
+                                },
+                                sheetConfig: state.sheetConfig,
+                                metrics: {
+                                  skuCount: state.products.length,
+                                  outOfStockCount: 0,
+                                  lowStockCount: 0,
+                                  stockValue: 0,
+                                  monthlySales: 0,
+                                  monthlyGrossProfit: 0,
+                                  monthlyExpenses: 0,
+                                  monthlyNetProfit: 0,
+                                  totalSalesAllTime: 0,
+                                  totalReceivable: 0,
+                                  staffCount: state.staff.length,
+                                  salesCount: state.sales.length,
+                                },
+                              },
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 shrink-0 cursor-pointer shadow-2xs"
+                          title={lang === 'bn' ? 'PDF ইনভয়েস ডাউনলোড করুন' : 'Download Invoice PDF'}
+                        >
+                          <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>PDF</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-3 text-center text-[11px] text-slate-400">
+                    {lang === 'bn'
+                      ? 'কোনো সাবস্ক্রিপশন ইনভয়েস পাওয়া যায়নি।'
+                      : 'No subscription invoices generated yet.'}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-        </form>
+        </div>
       </div>
 
       {/* Section 3: Historical Multi-User Audit Log */}

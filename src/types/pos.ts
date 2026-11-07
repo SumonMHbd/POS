@@ -84,6 +84,8 @@ export interface SaleTransaction {
   customerId?: string;
   customerName?: string;
   customerPhone?: string;
+  sellerName?: string;
+  sellerPhone?: string;
   cashierName: string;
   syncedToSheet?: boolean;
 }
