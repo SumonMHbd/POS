@@ -34,6 +34,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Store,
   Sun,
   Trash2,
@@ -214,6 +215,28 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   // Confirm Modal State
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [isConfirmBusy, setIsConfirmBusy] = useState(false);
+
+  // Direct Master Google Sheet & Shop Sheet URL Edit States
+  const [showEditMasterSheetModal, setShowEditMasterSheetModal] = useState(false);
+  const [editMasterSheetInput, setEditMasterSheetInput] = useState('');
+  const [isUpdatingMasterUrl, setIsUpdatingMasterUrl] = useState(false);
+
+  const [editingShopSheet, setEditingShopSheet] = useState<{ shopId: string; shopName: string; currentUrl: string } | null>(null);
+  const [editShopSheetInput, setEditShopSheetInput] = useState('');
+  const [isUpdatingShopSheetUrl, setIsUpdatingShopSheetUrl] = useState(false);
+
+  // Live Sheet Data Viewer Modal State
+  const [showLiveSheetModal, setShowLiveSheetModal] = useState(false);
+  const [liveSheetData, setLiveSheetData] = useState<{
+    masterTabs: Record<string, (string | number)[][]>;
+    shopWorkbooks: Record<string, { shopName: string; tabs: Record<string, (string | number)[][]> }>;
+    lastSyncedAt: string;
+    masterSheetUrl: string;
+  } | null>(null);
+  const [isLoadingLiveSheet, setIsLoadingLiveSheet] = useState(false);
+  const [selectedLiveWorkbook, setSelectedLiveWorkbook] = useState<string>('master');
+  const [selectedLiveTab, setSelectedLiveTab] = useState<string>('All_Shops_Directory');
+  const [liveSearchQuery, setLiveSearchQuery] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -515,6 +538,250 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     } finally {
       setIsSavingQuickPass(false);
     }
+  };
+
+  const handleSaveMasterSheetUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editMasterSheetInput.trim()) return;
+    setIsUpdatingMasterUrl(true);
+    try {
+      await updateMasterGoogleSheetUrl(session.token, editMasterSheetInput.trim());
+      onNotify(
+        lang === 'bn'
+          ? 'মাস্টার Google Sheet লিঙ্ক সফলভাবে আপডেট হয়েছে!'
+          : 'Master Google Sheet URL updated successfully!'
+      );
+      setShowEditMasterSheetModal(false);
+      await loadData();
+    } catch (err: unknown) {
+      onNotify(err instanceof Error ? err.message : 'Failed updating Master Sheet URL', true);
+    } finally {
+      setIsUpdatingMasterUrl(false);
+    }
+  };
+
+  const handleSaveShopSheetUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShopSheet) return;
+    setIsUpdatingShopSheetUrl(true);
+    try {
+      await updateShopGoogleSheetUrl(session.token, editingShopSheet.shopId, editShopSheetInput.trim());
+      onNotify(
+        lang === 'bn'
+          ? `"${editingShopSheet.shopName}" এর Google Sheet লিঙ্ক আপডেট হয়েছে!`
+          : `Updated Google Sheet URL for "${editingShopSheet.shopName}"`
+      );
+      setEditingShopSheet(null);
+      await loadData();
+    } catch (err: unknown) {
+      onNotify(err instanceof Error ? err.message : 'Failed updating shop sheet URL', true);
+    } finally {
+      setIsUpdatingShopSheetUrl(false);
+    }
+  };
+
+  const handleOpenLiveSheetViewer = async (targetWorkbook: string = 'master', targetTab?: string) => {
+    setShowLiveSheetModal(true);
+    setIsLoadingLiveSheet(true);
+    setSelectedLiveWorkbook(targetWorkbook);
+    try {
+      const data = await fetchLiveSheetData(session.token);
+      setLiveSheetData(data);
+      if (targetWorkbook === 'master') {
+        const tabs = Object.keys(data.masterTabs || {});
+        if (targetTab && tabs.includes(targetTab)) {
+          setSelectedLiveTab(targetTab);
+        } else if (tabs.length > 0) {
+          setSelectedLiveTab(tabs[0]);
+        }
+      } else {
+        const shopTabs = Object.keys(data.shopWorkbooks?.[targetWorkbook]?.tabs || {});
+        if (targetTab && shopTabs.includes(targetTab)) {
+          setSelectedLiveTab(targetTab);
+        } else if (shopTabs.includes('Products_Inventory')) {
+          setSelectedLiveTab('Products_Inventory');
+        } else if (shopTabs.length > 0) {
+          setSelectedLiveTab(shopTabs[0]);
+        }
+      }
+    } catch (err: unknown) {
+      onNotify(err instanceof Error ? err.message : 'Failed loading live sheet data', true);
+    } finally {
+      setIsLoadingLiveSheet(false);
+    }
+  };
+
+  const handleCopyActiveTabToClipboard = () => {
+    if (!liveSheetData) return;
+    const activeTabs =
+      selectedLiveWorkbook === 'master'
+        ? liveSheetData.masterTabs
+        : liveSheetData.shopWorkbooks?.[selectedLiveWorkbook]?.tabs;
+    const rows = activeTabs?.[selectedLiveTab];
+    if (!rows || rows.length === 0) {
+      onNotify('No rows to copy', true);
+      return;
+    }
+    const tsvContent = rows
+      .map((r) => r.map((c) => String(c ?? '').replace(/\t/g, ' ')).join('\t'))
+      .join('\n');
+    navigator.clipboard.writeText(tsvContent);
+    onNotify(
+      lang === 'bn'
+        ? `"${selectedLiveTab.replace(/_/g, ' ')}" এর সকল ডাটা কপি হয়েছে! গুগল শিটের A1 ঘরে পেস্ট (Ctrl+V) করুন।`
+        : `Copied all rows from "${selectedLiveTab.replace(/_/g, ' ')}"! Paste (Ctrl+V) into cell A1 in Google Sheets.`
+    );
+  };
+
+  const handleDownloadActiveTabCsv = () => {
+    if (!liveSheetData) return;
+    const activeTabs =
+      selectedLiveWorkbook === 'master'
+        ? liveSheetData.masterTabs
+        : liveSheetData.shopWorkbooks?.[selectedLiveWorkbook]?.tabs;
+    const rows = activeTabs?.[selectedLiveTab];
+    if (!rows || rows.length === 0) return;
+    const csvContent =
+      '\uFEFF' +
+      rows
+        .map((r) =>
+          r
+            .map((c) => {
+              const str = String(c ?? '');
+              return str.includes(',') || str.includes('"') || str.includes('\n')
+                ? `"${str.replace(/"/g, '""')}"`
+                : str;
+            })
+            .join(',')
+        )
+        .join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `MHS_POS_${selectedLiveWorkbook}_${selectedLiveTab}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    onNotify(lang === 'bn' ? 'CSV ফাইল ডাউনলোড হয়েছে!' : 'Tab downloaded as CSV!');
+  };
+
+  const handleCopyShopDataForGoogleSheet = async (shopId: string, shopName: string) => {
+    try {
+      const data = await fetchLiveSheetData(session.token);
+      setLiveSheetData(data);
+      const shopBook = data.shopWorkbooks?.[shopId];
+      const prodRows =
+        shopBook?.tabs?.['Products_Inventory'] || shopBook?.tabs?.['Summary'] || [];
+      if (prodRows.length > 0) {
+        const tsv = prodRows
+          .map((r) => r.map((c) => String(c ?? '').replace(/\t/g, ' ')).join('\t'))
+          .join('\n');
+        await navigator.clipboard.writeText(tsv);
+        onNotify(
+          lang === 'bn'
+            ? `"${shopName}" এর ১৬টি পণ্য ও স্টকের ডাটা কপি হয়েছে! গুগল শিটে Ctrl+V দিয়ে পেস্ট করুন।`
+            : `Copied "${shopName}" 16 products & inventory data! Paste into Google Sheets with Ctrl+V.`
+        );
+      } else {
+        onNotify('No data found for this shop', true);
+      }
+    } catch {
+      onNotify('Could not copy shop data', true);
+    }
+  };
+
+  const renderLiveSheetTable = () => {
+    const activeTabs =
+      selectedLiveWorkbook === 'master'
+        ? liveSheetData?.masterTabs
+        : liveSheetData?.shopWorkbooks?.[selectedLiveWorkbook]?.tabs;
+    const rawRows = activeTabs?.[selectedLiveTab];
+    if (!rawRows || rawRows.length === 0) {
+      return (
+        <div className="p-8 text-center text-xs text-slate-500">
+          No rows found in this sheet tab.
+        </div>
+      );
+    }
+    const headerRow = rawRows[0] || [];
+    const dataRows = rawRows.slice(1);
+    const filteredRows = liveSearchQuery.trim()
+      ? dataRows.filter((r) =>
+          r.some((cell) =>
+            String(cell).toLowerCase().includes(liveSearchQuery.trim().toLowerCase())
+          )
+        )
+      : dataRows;
+
+    return (
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden shadow-xs">
+        <div className="overflow-x-auto max-h-[60vh]">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="sticky top-0 bg-slate-900 text-white z-10 font-mono">
+              <tr>
+                <th className="w-10 px-3 py-2 text-center text-slate-400 border-r border-slate-700">#</th>
+                {headerRow.map((colName, cIdx) => (
+                  <th
+                    key={cIdx}
+                    className="px-3.5 py-2 font-semibold border-r border-slate-700/80 whitespace-nowrap"
+                  >
+                    {String(colName)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
+              {filteredRows.map((row, rIdx) => (
+                <tr
+                  key={rIdx}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
+                >
+                  <td className="px-3 py-2 text-center text-slate-400 border-r border-slate-200 dark:border-slate-800 text-[11px]">
+                    {rIdx + 1}
+                  </td>
+                  {row.map((cell, cIdx) => {
+                    const valStr = String(cell ?? '');
+                    const isUrl = valStr.startsWith('http');
+                    return (
+                      <td
+                        key={cIdx}
+                        className="px-3.5 py-2 border-r border-slate-100 dark:border-slate-800/40 text-slate-800 dark:text-slate-200 whitespace-nowrap max-w-xs truncate"
+                        title={valStr}
+                      >
+                        {isUrl ? (
+                          <a
+                            href={valStr}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                          >
+                            <span className="truncate">{valStr}</span>
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                          </a>
+                        ) : (
+                          valStr || <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+          <span>Total Rows: {filteredRows.length} (of {dataRows.length})</span>
+          <span>Sheet: {selectedLiveTab}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const handleExportAllPlatformCsv = () => {
+    if (!overview) return;
+    exportSuperAdminShopsSummaryCsv(overview.shops);
+    exportSuperAdminSubscriptionsCsv(overview.invoices);
+    onNotify(lang === 'bn' ? 'সকল প্ল্যাটফর্ম ডাটা CSV ফরম্যাটে ডাউনলোড হয়েছে!' : 'All platform data exported as CSV!');
   };
 
   const handleSavePaymentSubmit = async (e: React.FormEvent) => {
@@ -1010,6 +1277,17 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                     >
                       {lang === 'bn' ? 'কপি' : 'Copy Link'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditMasterSheetInput(masterSheetUrl);
+                        setShowEditMasterSheetModal(true);
+                      }}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer inline-flex items-center gap-1 ml-1"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                      <span>{lang === 'bn' ? 'শিট লিঙ্ক পরিবর্তন / পেস্ট করুন' : 'Change / Paste Sheet URL'}</span>
+                    </button>
                   </div>
                   <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                     {lang === 'bn'
@@ -1018,24 +1296,42 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <a
                   href={masterSheetUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm ${NEU_SOLID_BTN}`}
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm ${NEU_SOLID_BTN}`}
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   <span>{lang === 'bn' ? 'শিট খুলুন ↗' : 'Open Google Sheet ↗'}</span>
                 </a>
                 <button
                   type="button"
+                  onClick={() => handleOpenLiveSheetViewer('master')}
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 dark:border-indigo-700/60 bg-indigo-50/90 dark:bg-indigo-950/40 px-3.5 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-xs ${NEU_TINT_BTN}`}
+                  title={lang === 'bn' ? 'সংরক্ষিত সকল ডাটা ড্যাশবোর্ডে সরাসরি দেখুন' : 'View all stored platform data live in spreadsheet format'}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>{lang === 'bn' ? 'ডাটা দেখুন 📊' : 'Live Data 📊'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportAllPlatformCsv}
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 ${NEU_TINT_BTN}`}
+                  title={lang === 'bn' ? 'সকল প্ল্যাটফর্ম ডাটা CSV ফরম্যাটে ডাউনলোড করুন' : 'Download all platform data as CSV'}
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden sm:inline">{lang === 'bn' ? 'CSV ডাউনলোড' : 'Export CSV'}</span>
+                </button>
+                <button
+                  type="button"
                   disabled={busyMasterAction === 'sync'}
                   onClick={handleSyncMasterSheetNow}
-                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 ${NEU_TINT_BTN}`}
+                  className={`min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 ${NEU_TINT_BTN}`}
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${busyMasterAction === 'sync' ? 'animate-spin text-emerald-600' : ''}`} />
-                  <span>{busyMasterAction === 'sync' ? 'Syncing...' : 'Sync Now'}</span>
+                  <span>{busyMasterAction === 'sync' ? 'Syncing...' : 'Sync'}</span>
                 </button>
               </div>
             </div>
@@ -1331,6 +1627,21 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                     >
                                       {lang === 'bn' ? 'কপি' : 'Copy'}
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingShopSheet({
+                                          shopId: shop.shopId,
+                                          shopName: shop.shopNameEn || shop.shopNameBn,
+                                          currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                        });
+                                        setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                      }}
+                                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-sans cursor-pointer inline-flex items-center gap-0.5 ml-1"
+                                    >
+                                      <Edit3 className="h-2.5 w-2.5" />
+                                      <span>{lang === 'bn' ? 'এডিট' : 'Edit'}</span>
+                                    </button>
                                   </div>
                                 )}
                                 <div className="text-[11px] text-slate-400 mt-0.5">
@@ -1369,13 +1680,36 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                   </a>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
-                                      onNotify(lang === 'bn' ? 'গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Google Sheet URL copied!');
-                                    }}
-                                    className="text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-semibold whitespace-nowrap"
+                                    onClick={() => handleOpenLiveSheetViewer(shop.shopId, 'Products_Inventory')}
+                                    className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer whitespace-nowrap inline-flex items-center gap-0.5 text-[10px]"
+                                    title={lang === 'bn' ? 'দোকানের আসল ১৬টি পণ্য ও বিক্রির ডাটা দেখুন' : 'View shop actual 16 products & sales records'}
+                                  >
+                                    <FileSpreadsheet className="h-2.5 w-2.5" />
+                                    <span>{lang === 'bn' ? 'ডাটা 📊' : 'Data 📊'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyShopDataForGoogleSheet(shop.shopId, shop.shopNameEn || shop.shopNameBn)}
+                                    className="text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-semibold whitespace-nowrap text-[10px]"
+                                    title="Copy 16 products & inventory for Google Sheets"
                                   >
                                     {lang === 'bn' ? 'কপি' : 'Copy'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingShopSheet({
+                                        shopId: shop.shopId,
+                                        shopName: shop.shopNameEn || shop.shopNameBn,
+                                        currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                      });
+                                      setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                    }}
+                                    className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-semibold whitespace-nowrap inline-flex items-center gap-0.5 text-[10px]"
+                                    title="Edit / paste Google Sheet URL"
+                                  >
+                                    <Edit3 className="h-2.5 w-2.5" />
+                                    <span>{lang === 'bn' ? 'এডিট' : 'Edit'}</span>
                                   </button>
                                 </div>
                                 <div className="pt-0.5">
@@ -1881,13 +2215,36 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                               </a>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
-                                  onNotify(lang === 'bn' ? 'গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Google Sheet URL copied!');
-                                }}
-                                className="text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 underline cursor-pointer"
+                                onClick={() => handleOpenLiveSheetViewer(shop.shopId, 'Products_Inventory')}
+                                className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer whitespace-nowrap inline-flex items-center gap-0.5 text-[10px]"
+                                title={lang === 'bn' ? 'দোকানের আসল ১৬টি পণ্য ও বিক্রির ডাটা দেখুন' : 'View shop actual 16 products & sales records'}
                               >
-                                {lang === 'bn' ? 'লিঙ্ক কপি' : 'Copy link'}
+                                <FileSpreadsheet className="h-2.5 w-2.5" />
+                                <span>{lang === 'bn' ? 'ডাটা 📊' : 'Data 📊'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyShopDataForGoogleSheet(shop.shopId, shop.shopNameEn || shop.shopNameBn)}
+                                className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-semibold"
+                                title="Copy 16 products & sales for Google Sheets"
+                              >
+                                {lang === 'bn' ? 'কপি' : 'Copy'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingShopSheet({
+                                    shopId: shop.shopId,
+                                    shopName: shop.shopNameEn || shop.shopNameBn,
+                                    currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                  });
+                                  setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                }}
+                                className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer inline-flex items-center gap-0.5"
+                                title="Edit / paste Google Sheet URL"
+                              >
+                                <Edit3 className="h-2.5 w-2.5" />
+                                <span>{lang === 'bn' ? 'লিঙ্ক পরিবর্তন ✏️' : 'Edit URL ✏️'}</span>
                               </button>
                             </div>
                           ) : (
@@ -2340,17 +2697,42 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                       </div>
                     </div>
 
-                    {overview.googleSheetsEngine.masterDirectorySheetUrl && (
-                      <a
-                        href={overview.googleSheetsEngine.masterDirectorySheetUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 shrink-0 ${NEU_TINT_BTN}`}
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLiveSheetViewer('master')}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/50 bg-emerald-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-emerald-500 shrink-0 shadow-xs cursor-pointer"
+                        title={lang === 'bn' ? 'সরাসরি প্ল্যাটফর্মের সব আসল ডাটা দেখুন' : 'View live mirrored database records'}
                       >
-                        <span>{lang === 'bn' ? 'মাস্টার শিট খুলুন' : 'Open Master Sheet'}</span>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    )}
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        <span>{lang === 'bn' ? 'লাইভ ডাটা ভল্ট 📊' : 'Live Data Vault 📊'}</span>
+                      </button>
+
+                      {overview.googleSheetsEngine.masterDirectorySheetUrl && (
+                        <a
+                          href={overview.googleSheetsEngine.masterDirectorySheetUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 shrink-0 ${NEU_TINT_BTN}`}
+                        >
+                          <span>{lang === 'bn' ? 'মাস্টার শিট খুলুন ↗' : 'Open Sheet ↗'}</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditMasterSheetInput(overview.googleSheetsEngine.masterDirectorySheetUrl || '');
+                          setShowEditMasterSheetModal(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 shrink-0 cursor-pointer"
+                        title="Change or link your personal Google Sheet"
+                      >
+                        <Edit3 className="h-3 w-3 text-indigo-500" />
+                        <span>{lang === 'bn' ? 'লিঙ্ক পরিবর্তন ✏️' : 'Change URL ✏️'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Compact Apps Script Copy Bar */}
@@ -3550,6 +3932,382 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
             </div>
           </form>
         )}
+      </AppPopupModal>
+
+      {/* Modal 1: Direct Edit / Paste Master Google Sheet URL */}
+      <AppPopupModal
+        isOpen={showEditMasterSheetModal}
+        onClose={() => !isUpdatingMasterUrl && setShowEditMasterSheetModal(false)}
+        maxWidthClass="max-w-xl"
+        heightMode="compact"
+        ariaLabel={lang === 'bn' ? 'মাস্টার গুগল শিট লিঙ্ক পরিবর্তন' : 'Change Master Google Sheet URL'}
+      >
+        <form onSubmit={handleSaveMasterSheetUrl} className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {lang === 'bn' ? 'মাস্টার Google Sheet লিঙ্ক পরিবর্তন / পেস্ট করুন' : 'Change / Link Master Google Sheet'}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {lang === 'bn'
+                  ? 'আপনার নিজের Google Sheet এর লিংক এখানে পেস্ট করুন যেখানে সব ডাটা লিঙ্ক থাকবে।'
+                  : 'Paste your real Google Sheet URL or ID where all platform data should be mirrored.'}
+              </p>
+            </div>
+          </div>
+
+            <div className="space-y-2 text-xs">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                {lang === 'bn' ? 'Google Sheet লিঙ্ক অথবা Spreadsheet ID *' : 'Google Sheet URL or Spreadsheet ID *'}
+              </label>
+              <input
+                type="text"
+                required
+                value={editMasterSheetInput}
+                onChange={(e) => setEditMasterSheetInput(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
+                className="w-full min-h-[42px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3.5 py-2 text-xs font-mono focus:border-emerald-500 focus:outline-none"
+              />
+
+              {/* Quick Action Helpers */}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <a
+                  href="https://docs.google.com/spreadsheets/create"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1 hover:bg-slate-200"
+                >
+                  <Plus className="w-3 h-3 text-emerald-600" />
+                  <span>{lang === 'bn' ? 'ড্রাইভে নতুন শিট খুলুন ↗' : 'Create New Sheet in Drive ↗'}</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const data = await fetchLiveSheetData(session.token);
+                    const rows = data.masterTabs?.['All_Shops_Directory'] || [];
+                    const tsv = rows.map((r) => r.map((c) => String(c ?? '').replace(/\t/g, ' ')).join('\t')).join('\n');
+                    navigator.clipboard.writeText(tsv);
+                    onNotify(lang === 'bn' ? 'মাস্টার ডাটা কপি হয়েছে! শিটের A1 ঘরে Ctrl+V দিন।' : 'Master data copied! Paste (Ctrl+V) into cell A1 in Google Sheets.');
+                  }}
+                  className="px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 inline-flex items-center gap-1 hover:bg-emerald-100 cursor-pointer"
+                >
+                  <Copy className="w-3 h-3 text-emerald-600" />
+                  <span>{lang === 'bn' ? 'ডাটা কপি করুন (Ctrl+V)' : 'Copy All Data to Paste (Ctrl+V)'}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+                {lang === 'bn'
+                  ? 'টিপস: উপরের "নতুন শিট খুলুন" বাটনে চাপুন → ব্রাউজারের লিংক কপি করে এখানে পেস্ট করুন → "ডাটা কপি করুন" চেপে আপনার শিটে গিয়ে Ctrl+V দিয়ে পেস্ট করুন।'
+                  : 'Tip: Click "Create New Sheet in Drive" → Paste its URL here → Click "Copy All Data" and press Ctrl+V in cell A1 of your sheet.'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isUpdatingMasterUrl}
+                onClick={() => setShowEditMasterSheetModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingMasterUrl || !editMasterSheetInput.trim()}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+              >
+                {isUpdatingMasterUrl ? 'Saving...' : lang === 'bn' ? 'লিঙ্ক সেভ করুন' : 'Save Sheet Link'}
+              </button>
+            </div>
+          </form>
+        </AppPopupModal>
+
+        {/* Modal 2: Direct Edit / Paste Shop Google Sheet URL */}
+        <AppPopupModal
+          isOpen={Boolean(editingShopSheet)}
+          onClose={() => !isUpdatingShopSheetUrl && setEditingShopSheet(null)}
+          maxWidthClass="max-w-xl"
+          heightMode="compact"
+          ariaLabel="Edit Shop Google Sheet URL"
+        >
+          {editingShopSheet && (
+            <form onSubmit={handleSaveShopSheetUrl} className="p-5 sm:p-6 space-y-4">
+              <div className="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    {lang === 'bn'
+                      ? `"${editingShopSheet.shopName}" এর Google Sheet লিঙ্ক পরিবর্তন`
+                      : `Edit Google Sheet Link for "${editingShopSheet.shopName}"`}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {lang === 'bn'
+                      ? 'এই নির্দিষ্ট দোকানের জন্য আপনার তৈরি গুগল শিটের লিঙ্কটি এখানে পেস্ট করুন।'
+                      : 'Paste the dedicated Google Sheet URL for this specific shop.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  {lang === 'bn' ? 'দোকানের Google Sheet লিঙ্ক' : 'Shop Google Sheet URL'}
+                </label>
+                <input
+                  type="text"
+                  value={editShopSheetInput}
+                  onChange={(e) => setEditShopSheetInput(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHOP_SHEET_ID/edit"
+                  className="w-full min-h-[42px] rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3.5 py-2 text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                />
+
+                {/* Quick Action Helpers for Shop */}
+                <div className="flex items-center gap-2 flex-wrap pt-1">
+                  <a
+                    href="https://docs.google.com/spreadsheets/create"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1 hover:bg-slate-200"
+                  >
+                    <Plus className="w-3 h-3 text-emerald-600" />
+                    <span>{lang === 'bn' ? 'ড্রাইভে নতুন শিট খুলুন ↗' : 'Create New Sheet in Drive ↗'}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyShopDataForGoogleSheet(editingShopSheet.shopId, editingShopSheet.shopName)}
+                    className="px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 inline-flex items-center gap-1 hover:bg-emerald-100 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3 text-emerald-600" />
+                    <span>{lang === 'bn' ? '১৬টি পণ্য ও বিক্রির ডাটা কপি (Ctrl+V)' : 'Copy 16 Products & Sales (Ctrl+V)'}</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+                  {lang === 'bn'
+                    ? 'টিপস: শিটের লিংক সেভ করার পর "১৬টি পণ্য ও বিক্রির ডাটা কপি" বাটনে চাপ দিয়ে আপনার গুগল শিটের A1 ঘরে Ctrl+V পেস্ট করুন।'
+                    : 'Tip: After saving the sheet link, click "Copy 16 Products & Sales" and press Ctrl+V in cell A1 of your new Google Sheet.'}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isUpdatingShopSheetUrl}
+                  onClick={() => setEditingShopSheet(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingShopSheetUrl}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                >
+                  {isUpdatingShopSheetUrl ? 'Saving...' : lang === 'bn' ? 'সেভ করুন' : 'Save URL'}
+                </button>
+              </div>
+          </form>
+        )}
+      </AppPopupModal>
+
+      {/* Modal 3: Live Real-Time Platform Google Sheet Data Viewer */}
+      <AppPopupModal
+        isOpen={showLiveSheetModal}
+        onClose={() => setShowLiveSheetModal(false)}
+        maxWidthClass="max-w-6xl"
+        heightMode="screen"
+        ariaLabel={lang === 'bn' ? 'অনলাইন শিট ডাটা ভিউয়ার' : 'Live Platform Sheet Data Viewer'}
+      >
+        <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-900">
+          {/* Header */}
+          <div className="shrink-0 p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    {lang === 'bn'
+                      ? 'রিয়েল-টাইম প্ল্যাটফর্ম শিট ডাটা ভিউয়ার (Live Data Vault)'
+                      : 'Real-Time Platform Google Sheet Data Vault'}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                    Live Mirror
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 truncate">
+                  {lang === 'bn'
+                    ? 'প্ল্যাটফর্মে সংরক্ষিত সকল দোকান, লগইন পাসওয়ার্ড, ইনভয়েস ও পণ্যের আসল ডাটা'
+                    : 'Actual raw structured data stored in the platform mirrored for Google Sheets.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={handleCopyActiveTabToClipboard}
+                className="px-3 py-1.5 rounded-xl border border-emerald-500 bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 hover:bg-emerald-500 shadow-xs cursor-pointer"
+                title="Copy active tab as TSV so you can paste (Ctrl+V) into Google Sheets cell A1"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'শিট ডাটা কপি (Ctrl+V)' : 'Copy Tab Data (Ctrl+V)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadActiveTabCsv}
+                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                title="Download this tab as CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{lang === 'bn' ? 'ট্যাব CSV' : 'Tab CSV'}</span>
+              </button>
+
+              <a
+                href="https://docs.google.com/spreadsheets/create"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                title="Create a new blank Google Sheet in Drive"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{lang === 'bn' ? 'নতুন শিট ↗' : 'New Sheet ↗'}</span>
+              </a>
+
+              {masterSheetUrl && (
+                <a
+                  href={masterSheetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold inline-flex items-center gap-1.5 hover:bg-emerald-100"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'গুগল শিট ↗' : 'Open Sheet ↗'}</span>
+                </a>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowLiveSheetModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Helper Tip Bar */}
+          <div className="shrink-0 px-4 py-2 bg-emerald-500/10 border-b border-emerald-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-900 dark:text-emerald-300">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                {lang === 'bn'
+                  ? 'গুগল শিটে ডাটা সংরক্ষণ: উপরের "শিট ডাটা কপি (Ctrl+V)" চাপুন → আপনার গুগল শিটে গিয়ে A1 ঘরে Ctrl+V পেস্ট করুন।'
+                  : 'To export to Google Sheets: Click "Copy Tab Data (Ctrl+V)" → In your Google Sheet, select cell A1 and press Ctrl+V.'}
+              </span>
+            </span>
+            <div className="flex items-center gap-2 font-mono text-[10px]">
+              <span className="text-slate-500">Live Mirror:</span>
+              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                {liveSheetData?.lastSyncedAt?.slice(11, 19) || 'Active'}
+              </span>
+            </div>
+          </div>
+
+          {/* Subheader: Workbook Selector, Tab switcher & search */}
+          <div className="shrink-0 px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-950/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+            {/* Left: Workbook dropdown + tabs */}
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <select
+                value={selectedLiveWorkbook}
+                onChange={(e) => {
+                  const wId = e.target.value;
+                  setSelectedLiveWorkbook(wId);
+                  if (wId === 'master') {
+                    const tabs = Object.keys(liveSheetData?.masterTabs || {});
+                    if (tabs.length > 0) setSelectedLiveTab(tabs[0]);
+                  } else {
+                    const shopTabs = Object.keys(liveSheetData?.shopWorkbooks?.[wId]?.tabs || {});
+                    if (shopTabs.includes('Products_Inventory')) {
+                      setSelectedLiveTab('Products_Inventory');
+                    } else if (shopTabs.length > 0) {
+                      setSelectedLiveTab(shopTabs[0]);
+                    }
+                  }
+                }}
+                className="min-h-[32px] rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-slate-100 shadow-xs"
+              >
+                <option value="master">📁 Master Platform Directory & Vault</option>
+                {overview?.shops?.map((s) => (
+                  <option key={s.shopId} value={s.shopId}>
+                    🏪 {s.shopNameBn} ({s.shopNameEn})
+                  </option>
+                ))}
+              </select>
+
+              {/* Sheet Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {(() => {
+                  const activeTabs =
+                    selectedLiveWorkbook === 'master'
+                      ? liveSheetData?.masterTabs
+                      : liveSheetData?.shopWorkbooks?.[selectedLiveWorkbook]?.tabs;
+                  if (!activeTabs) return null;
+                  return Object.keys(activeTabs).map((tabName) => {
+                    const active = selectedLiveTab === tabName;
+                    return (
+                      <button
+                        key={tabName}
+                        type="button"
+                        onClick={() => setSelectedLiveTab(tabName)}
+                        className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {tabName.replace(/_/g, ' ')}
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Filter Search input */}
+            <div className="relative min-w-[200px] max-w-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={liveSearchQuery}
+                onChange={(e) => setLiveSearchQuery(e.target.value)}
+                placeholder={lang === 'bn' ? 'টেবিলে ফিল্টার করুন...' : 'Filter table rows...'}
+                className="w-full min-h-[32px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-8 pr-2.5 py-1 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Table Container */}
+          <div className="flex-1 overflow-auto p-4">
+            {isLoadingLiveSheet ? (
+              <div className="h-64 flex flex-col items-center justify-center gap-2 text-slate-500">
+                <RefreshCw className="w-6 h-6 animate-spin text-emerald-600" />
+                <p className="text-xs">
+                  {lang === 'bn' ? 'ডাটাবেজ লোড হচ্ছে...' : 'Loading live spreadsheet data...'}
+                </p>
+              </div>
+            ) : (
+              renderLiveSheetTable()
+            )}
+          </div>
+        </div>
       </AppPopupModal>
 
       <ConfirmActionModal

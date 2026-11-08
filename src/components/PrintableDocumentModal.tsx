@@ -183,7 +183,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                   {receiptSale.date} {receiptSale.timestamp ? receiptSale.timestamp.slice(11, 16) : ''}
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  Cashier: {receiptSale.cashierName || 'Staff'}
+                  Cashier / Seller: {receiptSale.sellerName || receiptSale.cashierName || 'Staff'}
                   {receiptSale.sellerPhone ? ` · Tel: ${receiptSale.sellerPhone}` : ''} · {receiptSale.paymentMethod}
                 </div>
                 {(receiptSale.customerName || receiptSale.customerPhone) && (
@@ -322,7 +322,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                     Payment Method: <span className="font-bold text-slate-900">{receiptSale.paymentMethod}</span>
                   </div>
                   <div className="text-xs text-slate-700">
-                    Cashier: <span className="font-medium text-slate-900">{receiptSale.cashierName || 'Staff'}</span>
+                    Cashier / Seller: <span className="font-medium text-slate-900">{receiptSale.sellerName || receiptSale.cashierName || 'Staff'}</span>
                     {receiptSale.sellerPhone && (
                       <span className="font-mono text-slate-500 ml-1.5">(Tel: {receiptSale.sellerPhone})</span>
                     )}

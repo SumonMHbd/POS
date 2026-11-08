@@ -234,6 +234,7 @@ export interface SheetConnectionConfig {
   spreadsheetUrl: string;
   autoSync: boolean;
   lastSyncedAt: string | null;
+  status?: string;
   provisioningStatus?: 'connected' | 'pending_bridge' | 'unlinked';
 }
 

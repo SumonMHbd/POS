@@ -995,7 +995,9 @@ export async function handleStaticHostApiRequest<T>(
         spreadsheetId: raw,
         spreadsheetUrl: raw,
         spreadsheetTitle: `${db.shops[shopId].posState.shopNameEn || shopId} Sheet`,
+        autoSync: true,
         status: raw ? 'connected' : 'disconnected',
+        provisioningStatus: raw ? 'connected' : 'unlinked',
         lastSyncedAt: new Date().toISOString(),
       };
       saveStaticDb(db);

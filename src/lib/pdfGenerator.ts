@@ -60,9 +60,10 @@ export function downloadPosReceiptPdf(params: {
   y += 3.5;
   doc.text(`DATE   : ${sale.date} ${sale.timestamp.slice(11, 16)}`, leftX, y);
   y += 3.5;
+  const cashierLabel = sale.sellerName || sale.cashierName || 'Staff';
   const cashierDisplay = sale.sellerPhone
-    ? `CASHIER: ${sale.cashierName || 'Staff'} (${sale.sellerPhone})`
-    : `CASHIER: ${sale.cashierName || 'Staff'}`;
+    ? `CASHIER: ${cashierLabel} (${sale.sellerPhone})`
+    : `CASHIER: ${cashierLabel}`;
   doc.text(cashierDisplay, leftX, y);
   y += 3.5;
   doc.text(`PAYMENT: ${sale.paymentMethod || 'Cash'}`, leftX, y);
@@ -214,9 +215,10 @@ export function downloadA4CashMemoPdf(params: {
   doc.text(`INVOICE: ${sale.invoiceNo}`, pageWidth - margin, 25, { align: 'right' });
   doc.setTextColor(203, 213, 225);
   doc.text(`DATE: ${sale.date} ${sale.timestamp ? sale.timestamp.slice(11, 16) : ''}`, pageWidth - margin, 31, { align: 'right' });
+  const a4CashierLabel = sale.sellerName || sale.cashierName || 'Staff';
   const a4Cashier = sale.sellerPhone
-    ? `CASHIER: ${sale.cashierName || 'Staff'} (${sale.sellerPhone})`
-    : `CASHIER: ${sale.cashierName || 'Staff'}`;
+    ? `CASHIER: ${a4CashierLabel} (${sale.sellerPhone})`
+    : `CASHIER: ${a4CashierLabel}`;
   doc.text(a4Cashier, pageWidth - margin, 37, { align: 'right' });
 
   // Body Meta Cards

@@ -1898,7 +1898,9 @@ async function startServer() {
       spreadsheetId: extractedId,
       spreadsheetUrl: finalUrl,
       spreadsheetTitle: `${shop.posState.shopNameEn || shop.shopId} Sheet`,
+      autoSync: true,
       status: finalUrl ? 'connected' : 'disconnected',
+      provisioningStatus: finalUrl ? 'connected' : 'unlinked',
       lastSyncedAt: new Date().toISOString(),
     };
     saveDatabase(db);
@@ -1914,7 +1916,7 @@ async function startServer() {
   app.get('/api/superadmin/live-sheet-data', requireSuperAdmin, (_req: AuthenticatedRequest, res: Response) => {
     const masterTabs = serializeMasterPlatformTabs(db);
     // Also include each shop's serialized workbook
-    const shopWorkbooks: Record<string, { shopName: string; tabs: Record<string, string[][]> }> = {};
+    const shopWorkbooks: Record<string, { shopName: string; tabs: Record<string, (string | number)[][]> }> = {};
     for (const [sId, s] of Object.entries(db.shops)) {
       shopWorkbooks[sId] = {
         shopName: `${s.posState.shopNameBn} (${s.posState.shopNameEn})`,

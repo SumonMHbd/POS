@@ -81,11 +81,19 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [customCustomerName, setCustomCustomerName] = useState('');
   const [customCustomerPhone, setCustomCustomerPhone] = useState('');
+  const [customSellerName, setCustomSellerName] = useState(cashierName || '');
   const [customSellerPhone, setCustomSellerPhone] = useState('');
   const [paidInput, setPaidInput] = useState<string>('');
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(false);
   const paymentDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync customSellerName if cashierName changes
+  useEffect(() => {
+    if (cashierName && !customSellerName) {
+      setCustomSellerName(cashierName);
+    }
+  }, [cashierName, customSellerName]);
 
   // Barcode Scanner Gate (Available on Business & Enterprise tiers or when entitled)
   const canScanBarcode =
@@ -106,6 +114,69 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   const handleBarcodeItemScanned = (product: Product) => {
     addToCart(product);
   };
+
+  // Hardware USB/Bluetooth Barcode Scanner listener directly in POS Terminal
+  const hardwareBarcodeBufferRef = useRef<string>('');
+  const lastKeyTimestampRef = useRef<number>(0);
+
+  const [scannerToast, setScannerToast] = useState<{ msg: string; isError?: boolean } | null>(null);
+
+  useEffect(() => {
+    const handleGlobalBarcodeKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in standard inputs or textareas
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (barcodeModalOpen) return;
+
+      const now = Date.now();
+      if (now - lastKeyTimestampRef.current > 150) {
+        hardwareBarcodeBufferRef.current = '';
+      }
+      lastKeyTimestampRef.current = now;
+
+      if (e.key === 'Enter') {
+        const scannedCode = hardwareBarcodeBufferRef.current.trim();
+        hardwareBarcodeBufferRef.current = '';
+        if (scannedCode.length >= 3) {
+          const cleanLower = scannedCode.toLowerCase();
+          const matched = products.find(
+            (p) =>
+              p.sku.toLowerCase() === cleanLower ||
+              p.id.toLowerCase() === cleanLower ||
+              p.name.toLowerCase() === cleanLower ||
+              (p.nameBn && p.nameBn.toLowerCase() === cleanLower)
+          );
+          if (matched) {
+            addToCart(matched);
+            setScannerToast({
+              msg:
+                lang === 'bn'
+                  ? `বারকোড স্ক্যান: "${matched.nameBn || matched.name}" কার্টে যোগ হয়েছে!`
+                  : `Barcode Scan: Added "${matched.name}" to cart!`,
+            });
+            setTimeout(() => setScannerToast(null), 3000);
+          } else {
+            setScannerToast({
+              msg:
+                lang === 'bn'
+                  ? `বারকোড "${scannedCode}" দিয়ে কোনো পণ্য পাওয়া যায়নি!`
+                  : `Barcode "${scannedCode}" not found!`,
+              isError: true,
+            });
+            setTimeout(() => setScannerToast(null), 3000);
+          }
+        }
+      } else if (e.key.length === 1) {
+        hardwareBarcodeBufferRef.current += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalBarcodeKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalBarcodeKeyDown);
+    };
+  }, [products, barcodeModalOpen, lang]);
 
   useEffect(() => {
     if (!paymentMenuOpen) return;
@@ -244,6 +315,9 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
       profit: ci.profit,
     }));
 
+    const finalSellerName = customSellerName.trim() || cashierName;
+    const finalSellerPhone = customSellerPhone.trim();
+
     const sale: SaleTransaction = {
       id: `sale-${Date.now()}`,
       invoiceNo: `INV-${dateIso.replace(/-/g, '').slice(2)}-${Math.floor(100 + Math.random() * 900)}`,
@@ -263,8 +337,9 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
       customerId: existingCust?.id,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
-      sellerPhone: customSellerPhone.trim() || undefined,
-      cashierName,
+      sellerName: finalSellerName,
+      sellerPhone: finalSellerPhone || undefined,
+      cashierName: finalSellerName,
     };
 
     const newCustomer =
@@ -564,14 +639,14 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
         </div>
 
         {/* Name & Phone Number Fields (Optional Receipt Info & Credit Customer) */}
-        <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-2.5 space-y-2">
+        <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-2.5 space-y-2.5">
           <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
             <span className="flex items-center gap-1.5 min-w-0">
               <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span className="truncate">
                 {lang === 'bn'
-                  ? 'রসিদের নাম ও ফোন নম্বর (ঐচ্ছিক)'
-                  : 'Name & Phone Number (Optional Receipt)'}
+                  ? 'রসিদের তথ্য: নাম ও ফোন নম্বর (ঐচ্ছিক)'
+                  : 'Receipt Info: Name & Phone Number (Optional)'}
               </span>
             </span>
             {dueAmount > 0 && (
@@ -581,79 +656,108 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
             )}
           </div>
 
-          {credits.length > 0 && (
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedCustomerId(val);
-                if (val) {
-                  const found = credits.find((c) => c.id === val);
-                  if (found) {
-                    setCustomCustomerName(found.name);
-                    setCustomCustomerPhone(found.phone);
-                  }
-                }
-              }}
-              className="w-full min-h-[32px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs"
-            >
-              <option value="">
-                {lang === 'bn' ? '— নিয়মিত বাকিদার তালিকা থেকে বাছুন —' : '— Or Select Existing Customer —'}
-              </option>
-              {credits.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.phone}) — Due {formatBDT(c.balanceDue)}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <div className="grid grid-cols-2 gap-1.5">
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-0.5">
-                {lang === 'bn' ? 'নাম (ঐচ্ছিক)' : 'Name (Optional)'}
-              </label>
-              <input
-                type="text"
-                placeholder={lang === 'bn' ? 'ক্রেতা বা বিক্রয়কারী' : 'Customer or Seller'}
-                value={customCustomerName}
-                onChange={(e) => {
-                  setCustomCustomerName(e.target.value);
-                  if (selectedCustomerId) setSelectedCustomerId('');
-                }}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400"
-              />
+          {/* Seller / Cashier Section */}
+          <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+              <span>{lang === 'bn' ? 'বিক্রেতার তথ্য (রসিদে মুদ্রণ)' : 'Seller / Cashier Info (Optional)'}</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-normal lowercase">{lang === 'bn' ? 'ঐচ্ছিক' : 'optional'}</span>
             </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-0.5">
-                {lang === 'bn' ? 'ফোন নম্বর (ঐচ্ছিক)' : 'Phone (Optional)'}
-              </label>
-              <input
-                type="text"
-                placeholder={lang === 'bn' ? '017XXXXXXXX' : '017XXXXXXXX'}
-                value={customCustomerPhone}
-                onChange={(e) => {
-                  setCustomCustomerPhone(e.target.value);
-                  if (selectedCustomerId) setSelectedCustomerId('');
-                }}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400"
-              />
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">
+                  {lang === 'bn' ? 'বিক্রেতার নাম' : 'Seller Name'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={cashierName || 'Seller name'}
+                  value={customSellerName}
+                  onChange={(e) => setCustomSellerName(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 px-2 py-1 text-xs text-slate-900 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">
+                  {lang === 'bn' ? 'বিক্রেতার ফোন নম্বর' : 'Seller Phone'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="017XXXXXXXX"
+                  value={customSellerPhone}
+                  onChange={(e) => setCustomSellerPhone(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 px-2 py-1 text-xs font-mono text-slate-900 dark:text-slate-100"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Seller / Cashier Contact Tag on Receipt */}
-          <div className="pt-0.5 flex items-center justify-between text-[11px] text-slate-500">
-            <span className="truncate">
-              {lang === 'bn' ? 'বিক্রয়কারী:' : 'Sold By:'} <strong className="text-slate-700 dark:text-slate-300">{cashierName}</strong>
-            </span>
-            <input
-              type="text"
-              placeholder={lang === 'bn' ? 'বিক্রেতার ফোন (ঐচ্ছিক)' : 'Seller Phone (opt)'}
-              value={customSellerPhone}
-              onChange={(e) => setCustomSellerPhone(e.target.value)}
-              className="w-36 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] font-mono text-right"
-              title={lang === 'bn' ? 'রসিদে বিক্রয়কারীর ফোন নম্বর যুক্ত করুন' : 'Include seller phone on receipt'}
-            />
+          {/* Customer / Buyer Section */}
+          <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+              <span>{lang === 'bn' ? 'ক্রেতার তথ্য (ঐচ্ছিক)' : 'Customer Info (Optional)'}</span>
+              {credits.length > 0 && (
+                <span className="text-slate-400 font-normal lowercase">{credits.length} on ledger</span>
+              )}
+            </div>
+
+            {credits.length > 0 && (
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedCustomerId(val);
+                  if (val) {
+                    const found = credits.find((c) => c.id === val);
+                    if (found) {
+                      setCustomCustomerName(found.name);
+                      setCustomCustomerPhone(found.phone);
+                    }
+                  }
+                }}
+                className="w-full min-h-[30px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 px-2 py-0.5 text-xs"
+              >
+                <option value="">
+                  {lang === 'bn' ? '— নিয়মিত বাকিদার তালিকা থেকে বাছুন —' : '— Or Select Existing Customer —'}
+                </option>
+                {credits.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.phone}) — Due {formatBDT(c.balanceDue)}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">
+                  {lang === 'bn' ? 'ক্রেতার নাম' : 'Customer Name'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'যেমন: রহিম মিয়া' : 'Customer name'}
+                  value={customCustomerName}
+                  onChange={(e) => {
+                    setCustomCustomerName(e.target.value);
+                    if (selectedCustomerId) setSelectedCustomerId('');
+                  }}
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 px-2 py-1 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">
+                  {lang === 'bn' ? 'ক্রেতার ফোন নম্বর' : 'Customer Phone'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="017XXXXXXXX"
+                  value={customCustomerPhone}
+                  onChange={(e) => {
+                    setCustomCustomerPhone(e.target.value);
+                    if (selectedCustomerId) setSelectedCustomerId('');
+                  }}
+                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950 px-2 py-1 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -712,6 +816,28 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* Left 8 Cols: Search, Category Bar & Touch Product Grid */}
       <div className="lg:col-span-8 space-y-4">
+        {scannerToast && (
+          <div
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-md animate-slide-in ${
+              scannerToast.isError
+                ? 'bg-rose-500 text-white'
+                : 'bg-emerald-600 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Barcode className="w-4 h-4 shrink-0" />
+              <span>{scannerToast.msg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setScannerToast(null)}
+              className="text-white/80 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         <div className="neu-box-static rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -730,16 +856,16 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
               type="button"
               onClick={handleOpenBarcodeScanner}
               title={
-                isEnterprise
+                canScanBarcode
                   ? lang === 'bn'
-                    ? 'ক্যামেরা দিয়ে বারকোড স্ক্যান করুন (Enterprise)'
-                    : 'Scan Barcode with Camera (Enterprise)'
+                    ? 'ক্যামেরা দিয়ে বারকোড স্ক্যান করুন'
+                    : 'Scan Barcode with Camera'
                   : lang === 'bn'
-                  ? 'বারকোড স্ক্যানার শুধুমাত্র Enterprise প্ল্যানে উপলব্ধ'
-                  : 'Barcode Scanner is available on the Enterprise Plan'
+                  ? 'বারকোড স্ক্যানার সক্রিয় করতে প্ল্যান আপগ্রেড করুন'
+                  : 'Upgrade plan to activate barcode scanner'
               }
               className={`min-h-[44px] px-3 sm:px-4 rounded-xl flex items-center gap-2 font-bold text-xs sm:text-sm whitespace-nowrap transition-all shrink-0 border ${
-                isEnterprise
+                canScanBarcode
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-xs'
                   : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
               }`}
@@ -749,10 +875,10 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
                 {lang === 'bn' ? 'বারকোড স্ক্যান' : 'Scan Barcode'}
               </span>
               <span className="sm:hidden">{lang === 'bn' ? 'স্ক্যান' : 'Scan'}</span>
-              {!isEnterprise ? (
+              {!canScanBarcode ? (
                 <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
                   <Lock className="w-2.5 h-2.5" />
-                  Ent
+                  Upgrade
                 </span>
               ) : (
                 <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/20 text-emerald-100 border border-emerald-400/30">

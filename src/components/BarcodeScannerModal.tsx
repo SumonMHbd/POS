@@ -325,7 +325,6 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             const height = Math.floor(Math.min(viewfinderHeight * 0.65, 140));
             return { width, height };
           },
-          aspectRatio: 1.333,
         };
 
         scanner
@@ -387,29 +386,54 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-popup-backdrop"
       onClick={onClose}
     >
-      {/* Scoped CSS to suppress html5-qrcode injected DOM clutter and ensure smooth video framing */}
+      {/* Scoped CSS to eliminate html5-qrcode injected spacing issues, default buttons & margins */}
       <style>{`
         #barcode-scanner-view {
           position: relative !important;
           width: 100% !important;
           height: 100% !important;
+          min-height: 0 !important;
+          max-height: 100% !important;
           overflow: hidden !important;
           border-radius: 0.75rem !important;
-        }
-        #barcode-scanner-view video {
-          width: 100% !important;
-          height: 100% !important;
-          object-fit: cover !important;
-          border-radius: 0.75rem !important;
-        }
-        #barcode-scanner-view img,
-        #barcode-scanner-view__dashboard,
-        #barcode-scanner-view__header_message {
-          display: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
         #barcode-scanner-view__scan_region {
+          position: relative !important;
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          max-height: 100% !important;
+          overflow: hidden !important;
+          border-radius: 0.75rem !important;
           border: none !important;
           box-shadow: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        #barcode-scanner-view video,
+        #barcode-scanner-view__scan_region video {
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          max-height: 100% !important;
+          object-fit: cover !important;
+          border-radius: 0.75rem !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        #barcode-scanner-view img,
+        #barcode-scanner-view canvas,
+        #barcode-scanner-view__dashboard,
+        #barcode-scanner-view__header_message,
+        #barcode-scanner-view__status_span,
+        #barcode-scanner-view__dashboard_section_csr,
+        #barcode-scanner-view__dashboard_section_swaplink {
+          display: none !important;
         }
       `}</style>
 
