@@ -17,14 +17,17 @@ import { handleStaticHostApiRequest } from './staticHostFallback';
 
 // Ready-to-deploy 100% Free Google Apps Script Bridge (Zero Sign-in Button, Zero Third-Party Cost!)
 // Stores all Super Admin, Shop Owner & Staff Login/Password records in your Master Google Sheet
-// AND automatically creates a dedicated Google Sheet named after every new Shop added by Super Admin!
+// AND automatically creates a dedicated Google Sheet named after every new Shop added by Super Admin under mhsumon670@gmail.com!
 export const GOOGLE_APPS_SCRIPT_BRIDGE_CODE = `// MHS POS — Master Admin Credentials & Multi-Shop Google Sheets Engine
+// CONNECTED GOOGLE ACCOUNT: mhsumon670@gmail.com
 // HOW TO DEPLOY (Takes 60 Seconds — 100% Free):
-// 1. Open your Google Sheet -> Click "Extensions" -> "Apps Script"
-// 2. Delete existing code, paste ALL of this code, and press Ctrl+S (Save)
-// 3. Click "Deploy" (top right) -> "New deployment" -> Select type: "Web app"
-// 4. Set Execute as: "Me" | Who has access: "Anyone" -> Click "Deploy" & Authorize
-// 5. Copy the "Web app URL" and paste it inside MHS POS Super Admin -> Google Sheets DB!
+// 1. Sign in to Google with mhsumon670@gmail.com
+// 2. Open Google Sheets / Drive -> Click "Extensions" -> "Apps Script"
+// 3. Delete existing code, paste ALL of this code, and press Ctrl+S (Save)
+// 4. Click "Deploy" (top right) -> "New deployment" -> Select type: "Web app"
+// 5. Set Execute as: "Me (mhsumon670@gmail.com)" | Who has access: "Anyone" -> Click "Deploy" & Authorize
+// 6. Copy the "Web app URL" and paste it inside MHS POS Super Admin -> Google Sheets DB!
+// -> All new shops will have dedicated Google Sheets created directly in mhsumon670@gmail.com Google Drive!
 
 function doGet() {
   return jsonOut_({

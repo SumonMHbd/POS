@@ -956,9 +956,22 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
     [overview, lang]
   );
 
-  const masterSheetUrl =
-    overview?.googleSheetsEngine?.masterDirectorySheetUrl ||
-    'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
+  const resolveAbsoluteSheetUrl = useCallback((rawUrl?: string, fallbackId: string = 'master'): string => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    if (!rawUrl) return `${origin}/sheets/${fallbackId}`;
+    if (rawUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')) {
+      return `${origin}/sheets/${fallbackId}`;
+    }
+    if (rawUrl.startsWith('/')) {
+      return `${origin}${rawUrl}`;
+    }
+    return rawUrl;
+  }, []);
+
+  const masterSheetUrl = useMemo(() => {
+    const raw = overview?.googleSheetsEngine?.masterDirectorySheetUrl || '/sheets/master';
+    return resolveAbsoluteSheetUrl(raw, 'master');
+  }, [overview?.googleSheetsEngine?.masterDirectorySheetUrl, resolveAbsoluteSheetUrl]);
   const isSheetsConnected = Boolean(masterSheetUrl);
 
   const superAdminNavItems: Array<{
@@ -1558,6 +1571,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                       const ownerPass = getShopOwnerPassword(shop.shopId);
                       const isPassShown = Boolean(revealedShopPasswords[shop.shopId]);
                       const isEnterprise = shop.plan === 'Enterprise' || Boolean(shop.entitlements?.enableBarcodeScanner);
+                      const resolvedShopSheetUrl = resolveAbsoluteSheetUrl(shop.sheetConfig.spreadsheetUrl, shop.shopId);
 
                       return (
                         <tr
@@ -1589,13 +1603,13 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                   >
                                     {shop.status}
                                   </span>
-                                  {shop.sheetConfig.spreadsheetUrl ? (
+                                  {resolvedShopSheetUrl ? (
                                     <a
-                                      href={shop.sheetConfig.spreadsheetUrl}
+                                      href={resolvedShopSheetUrl}
                                       target="_blank"
                                       rel="noreferrer"
                                       className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
-                                      title={shop.sheetConfig.spreadsheetUrl}
+                                      title={resolvedShopSheetUrl}
                                     >
                                       <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                                       <span>Google Sheet ↗</span>
@@ -1605,22 +1619,22 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                 <div className="text-[11px] font-mono text-slate-500 mt-0.5 break-all sm:break-normal">
                                   {shop.ownerName} · {shop.ownerEmail} {shop.phone ? `· ${shop.phone}` : ''}
                                 </div>
-                                {shop.sheetConfig.spreadsheetUrl && (
+                                {resolvedShopSheetUrl && (
                                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
                                     <FileSpreadsheet className="h-3 w-3 shrink-0" />
                                     <a
-                                      href={shop.sheetConfig.spreadsheetUrl}
+                                      href={resolvedShopSheetUrl}
                                       target="_blank"
                                       rel="noreferrer"
                                       className="hover:underline truncate max-w-[200px]"
-                                      title={shop.sheetConfig.spreadsheetUrl}
+                                      title={resolvedShopSheetUrl}
                                     >
-                                      {shop.sheetConfig.spreadsheetUrl}
+                                      {resolvedShopSheetUrl}
                                     </a>
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        navigator.clipboard.writeText(shop.sheetConfig.spreadsheetUrl);
+                                        navigator.clipboard.writeText(resolvedShopSheetUrl);
                                         onNotify(lang === 'bn' ? 'দোকানের গুগল শিট লিঙ্ক কপি হয়েছে!' : 'Shop Google Sheet URL copied!');
                                       }}
                                       className="text-[10px] text-slate-500 hover:text-emerald-600 underline font-sans cursor-pointer"
@@ -1633,9 +1647,9 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                         setEditingShopSheet({
                                           shopId: shop.shopId,
                                           shopName: shop.shopNameEn || shop.shopNameBn,
-                                          currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                          currentUrl: resolvedShopSheetUrl || '',
                                         });
-                                        setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                        setEditShopSheetInput(resolvedShopSheetUrl || '');
                                       }}
                                       className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-sans cursor-pointer inline-flex items-center gap-0.5 ml-1"
                                     >
@@ -1653,14 +1667,14 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
                           {/* Google Sheet Link & Bill Format */}
                           <td>
-                            {shop.sheetConfig.spreadsheetUrl ? (
+                            {resolvedShopSheetUrl ? (
                               <div className="space-y-1 max-w-[210px]">
                                 <a
-                                  href={shop.sheetConfig.spreadsheetUrl}
+                                  href={resolvedShopSheetUrl}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold hover:underline text-xs group"
-                                  title={shop.sheetConfig.spreadsheetUrl}
+                                  title={resolvedShopSheetUrl}
                                 >
                                   <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                                   <span className="truncate max-w-[140px]">
@@ -1670,13 +1684,15 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                 </a>
                                 <div className="flex items-center gap-1.5 text-[10px]">
                                   <a
-                                    href={shop.sheetConfig.spreadsheetUrl}
+                                    href={resolvedShopSheetUrl}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="font-mono text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-[110px]"
-                                    title={shop.sheetConfig.spreadsheetUrl}
+                                    title={resolvedShopSheetUrl}
                                   >
-                                    docs.google.com/...
+                                    {resolvedShopSheetUrl.includes('docs.google.com')
+                                      ? 'docs.google.com/...'
+                                      : resolvedShopSheetUrl.replace(/^https?:\/\//, '')}
                                   </a>
                                   <button
                                     type="button"
@@ -1701,9 +1717,9 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                       setEditingShopSheet({
                                         shopId: shop.shopId,
                                         shopName: shop.shopNameEn || shop.shopNameBn,
-                                        currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                        currentUrl: resolvedShopSheetUrl || '',
                                       });
-                                      setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                      setEditShopSheetInput(resolvedShopSheetUrl || '');
                                     }}
                                     className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-semibold whitespace-nowrap inline-flex items-center gap-0.5 text-[10px]"
                                     title="Edit / paste Google Sheet URL"
@@ -2694,6 +2710,15 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                             ? 'সকল অ্যাডমিন ও দোকানের পাসওয়ার্ড সংরক্ষণ এবং প্রতিটি নতুন দোকানের জন্য স্বয়ংক্রিয় Google Sheet তৈরি।'
                             : 'Stores all Admin, Shop Owner & Staff credentials and auto-creates dedicated workbooks for new shops.'}
                         </p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/80 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            Connected Account: mhsumon670@gmail.com
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            (All new shop Google Sheets will be created under this email)
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -3344,7 +3369,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
               </div>
             </div>
 
-            <div className="rounded-xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/30 p-3.5">
+            <div className="rounded-xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/30 p-3.5 space-y-1.5">
               <label className="flex items-center gap-2.5 cursor-pointer font-semibold text-emerald-800 dark:text-emerald-300 min-w-0">
                 <input
                   type="checkbox"
@@ -3356,6 +3381,12 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                   Auto-create dedicated Google Sheet ({newShopNameEn || 'New Shop'} — MHS POS)
                 </span>
               </label>
+              <div className="text-[11px] text-emerald-700 dark:text-emerald-400 pl-6.5 flex items-center gap-1.5 flex-wrap">
+                <span className="font-medium">Created under connected email:</span>
+                <span className="font-mono font-bold bg-white/70 dark:bg-slate-900/70 px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 text-slate-800 dark:text-slate-200">
+                  mhsumon670@gmail.com
+                </span>
+              </div>
             </div>
           </div>
 

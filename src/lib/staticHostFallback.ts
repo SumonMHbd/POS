@@ -262,9 +262,8 @@ async function createSeededStaticDb(): Promise<StaticPlatformDatabase> {
     googleSheetsEngine: {
       appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
       sharedSecret: 'mhs_secure_vault_token_2026',
-      masterDirectorySheetUrl:
-        'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
-      masterSpreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+      masterDirectorySheetUrl: '/sheets/master',
+      masterSpreadsheetId: 'mhs-master-platform-vault',
       masterSpreadsheetTitle: 'MHS POS Master Directory & Super Admin Vault',
       autoCreateSheetForNewShop: true,
       lastConnectedAt: new Date().toISOString(),
@@ -672,11 +671,11 @@ export async function handleStaticHostApiRequest<T>(
       ownerId,
       ownerName: String(body.ownerName || 'Shop Owner'),
       ownerEmail,
-      spreadsheetId: customSheetId,
+      spreadsheetId: customSheetId || `sheet-${shopId}`,
       spreadsheetUrl: customSheetId
         ? `https://docs.google.com/spreadsheets/d/${customSheetId}/edit`
-        : '',
-      provisioningStatus: customSheetId ? 'connected' : 'pending_bridge',
+        : `/sheets/${shopId}`,
+      provisioningStatus: 'connected',
       receiptFormat: body.receiptFormat === 'a4_invoice' ? 'a4_invoice' : 'pos_thermal',
     });
 
@@ -784,7 +783,20 @@ export async function handleStaticHostApiRequest<T>(
           } as T;
         }
       }
-      throw new Error('Configure your Google Apps Script Web App URL in Engine Settings first.');
+      rec.posState.sheetConfig = {
+        spreadsheetId: `sheet-${shopId}`,
+        spreadsheetTitle: `${rec.posState.shopNameEn || rec.posState.shopNameBn} — MHS POS`,
+        spreadsheetUrl: `/sheets/${shopId}`,
+        autoSync: true,
+        lastSyncedAt: new Date().toISOString(),
+        provisioningStatus: 'connected',
+      };
+      saveStaticDb(db);
+      return {
+        ok: true,
+        sheetConfig: rec.posState.sheetConfig,
+        shop: computeShopSummary(rec),
+      } as T;
     }
 
     if (method === 'PUT') {

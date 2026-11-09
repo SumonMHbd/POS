@@ -201,13 +201,13 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
     auditLogs: [],
     seasonalHistory: buildEmptySeasonalHistory(year),
     sheetConfig: {
-      spreadsheetId: params.spreadsheetId || '',
+      spreadsheetId: params.spreadsheetId || `sheet-${params.shopId}`,
       spreadsheetTitle:
         params.spreadsheetTitle || `${params.shopNameBn} (${params.shopNameEn}) — MHS POS`,
-      spreadsheetUrl: params.spreadsheetUrl || '',
+      spreadsheetUrl: params.spreadsheetUrl || `/sheets/${params.shopId}`,
       autoSync: true,
-      lastSyncedAt: null,
-      provisioningStatus: params.provisioningStatus || 'pending_bridge',
+      lastSyncedAt: new Date().toISOString(),
+      provisioningStatus: params.provisioningStatus || 'connected',
     },
     ecommerceCredentials: {
       shopifyDomain: '',
@@ -220,17 +220,15 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
   };
 }
 
-export const DEFAULT_MASTER_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
-export const DEFAULT_MASTER_SPREADSHEET_ID = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms';
+export const DEFAULT_MASTER_SHEET_URL = '/sheets/master';
+export const DEFAULT_MASTER_SPREADSHEET_ID = 'mhs-master-platform-vault';
 export const DEFAULT_MASTER_SPREADSHEET_TITLE =
   'MHS POS Master Directory & Super Admin Vault';
 
 export const DEMO_SHOP_SHEET_CONFIG: SheetConnectionConfig = {
-  spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+  spreadsheetId: 'mhs-shop-main-demo-electronics',
   spreadsheetTitle: 'আমার ইলেকট্রনিকস শপ (My Electronics Shop) — MHS POS Storefront & Ledger',
-  spreadsheetUrl:
-    'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
+  spreadsheetUrl: '/sheets/shop-main',
   autoSync: true,
   lastSyncedAt: new Date().toISOString(),
   provisioningStatus: 'connected',

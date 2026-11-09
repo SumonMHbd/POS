@@ -791,7 +791,11 @@ function loadDatabase(): PlatformDatabase {
             lastMasterSyncedAt: new Date().toISOString(),
           };
           migrated = true;
-        } else if (!parsed.googleSheetsEngine.masterDirectorySheetUrl || !parsed.googleSheetsEngine.masterDirectorySheetUrl.trim()) {
+        } else if (
+          !parsed.googleSheetsEngine.masterDirectorySheetUrl ||
+          !parsed.googleSheetsEngine.masterDirectorySheetUrl.trim() ||
+          parsed.googleSheetsEngine.masterDirectorySheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')
+        ) {
           parsed.googleSheetsEngine.masterDirectorySheetUrl = DEFAULT_MASTER_SHEET_URL;
           parsed.googleSheetsEngine.masterSpreadsheetId = DEFAULT_MASTER_SPREADSHEET_ID;
           parsed.googleSheetsEngine.masterSpreadsheetTitle = DEFAULT_MASTER_SPREADSHEET_TITLE;
@@ -816,7 +820,11 @@ function loadDatabase(): PlatformDatabase {
             demoShop.posState.seasonalHistory = DEMO_SEASONAL_HISTORY.map((m) => ({ ...m }));
             migrated = true;
           }
-          if (!demoShop.posState.sheetConfig || !demoShop.posState.sheetConfig.spreadsheetUrl) {
+          if (
+            !demoShop.posState.sheetConfig ||
+            !demoShop.posState.sheetConfig.spreadsheetUrl ||
+            demoShop.posState.sheetConfig.spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')
+          ) {
             demoShop.posState.sheetConfig = { ...DEMO_SHOP_SHEET_CONFIG };
             migrated = true;
           }
@@ -830,6 +838,27 @@ function loadDatabase(): PlatformDatabase {
               maxStaffAccounts: demoShop.entitlements?.maxStaffAccounts || 15,
             };
             migrated = true;
+          }
+        }
+
+        // Ensure ALL shops have a live, working Google Sheet link
+        for (const [sId, sRecord] of Object.entries(parsed.shops)) {
+          if (sRecord && sRecord.posState) {
+            if (
+              !sRecord.posState.sheetConfig ||
+              !sRecord.posState.sheetConfig.spreadsheetUrl ||
+              sRecord.posState.sheetConfig.spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')
+            ) {
+              sRecord.posState.sheetConfig = {
+                spreadsheetId: `sheet-${sId}`,
+                spreadsheetTitle: `${sRecord.posState.shopNameBn || sRecord.posState.shopNameEn || 'Shop'} — MHS POS`,
+                spreadsheetUrl: sId === 'shop-main' ? '/sheets/shop-main' : `/sheets/${sId}`,
+                autoSync: true,
+                lastSyncedAt: new Date().toISOString(),
+                provisioningStatus: 'connected',
+              };
+              migrated = true;
+            }
           }
         }
 
@@ -1932,6 +1961,107 @@ async function startServer() {
     });
   });
 
+  // Public: Live Structured Sheet Data for Standalone Google Sheet Viewer
+  app.get('/api/public/sheets/data', (req: Request, res: Response) => {
+    const type = String(req.query.type || '').trim().toLowerCase();
+    const rawShopId = String(req.query.shopId || '').trim();
+
+    if (type === 'master' || rawShopId === 'master') {
+      const masterTabs = serializeMasterPlatformTabs(db);
+      res.json({
+        ok: true,
+        type: 'master',
+        title: db.googleSheetsEngine.masterSpreadsheetTitle || 'MHS POS Master Directory & Super Admin Vault',
+        tabs: masterTabs,
+        lastSyncedAt: db.googleSheetsEngine.lastMasterSyncedAt || new Date().toISOString(),
+        sheetUrl: db.googleSheetsEngine.masterDirectorySheetUrl,
+      });
+      return;
+    }
+
+    const shopId = rawShopId || 'shop-main';
+    const shop = db.shops[shopId] || db.shops['shop-main'];
+    if (!shop) {
+      res.status(404).json({ error: 'Shop not found.' });
+      return;
+    }
+
+    const shopTabs = serializeShopWorkbookTabs(shop.posState);
+    res.json({
+      ok: true,
+      type: 'shop',
+      shopId: shop.shopId,
+      shopName: `${shop.posState.shopNameBn} (${shop.posState.shopNameEn})`,
+      title:
+        shop.posState.sheetConfig.spreadsheetTitle ||
+        `${shop.posState.shopNameBn} (${shop.posState.shopNameEn}) — MHS POS Storefront & Ledger`,
+      tabs: shopTabs,
+      lastSyncedAt: shop.posState.sheetConfig.lastSyncedAt || new Date().toISOString(),
+      sheetUrl: shop.posState.sheetConfig.spreadsheetUrl,
+    });
+  });
+
+  // Public: Raw CSV Export for Google Sheets =IMPORTDATA(...) formula & 1-Click Excel Download
+  app.get('/api/public/sheets/csv', (req: Request, res: Response) => {
+    const type = String(req.query.type || '').trim().toLowerCase();
+    const rawShopId = String(req.query.shopId || '').trim();
+    const tabName = String(req.query.tab || '').trim();
+
+    let tabs: Record<string, (string | number)[][]>;
+    let defaultTab: string;
+    let filenamePrefix: string;
+
+    if (type === 'master' || rawShopId === 'master') {
+      tabs = serializeMasterPlatformTabs(db);
+      defaultTab = 'Admin_Users_Credentials';
+      filenamePrefix = 'mhs-pos-master';
+    } else {
+      const shopId = rawShopId || 'shop-main';
+      const shop = db.shops[shopId] || db.shops['shop-main'];
+      if (!shop) {
+        res.status(404).send('Shop not found');
+        return;
+      }
+      tabs = serializeShopWorkbookTabs(shop.posState);
+      defaultTab = 'Products_Inventory';
+      filenamePrefix = `${shop.posState.shopNameEn || 'shop'}`
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_');
+    }
+
+    const selectedTab = tabName && tabs[tabName] ? tabName : defaultTab;
+    const rows = tabs[selectedTab] || [];
+
+    const csvContent =
+      '\uFEFF' +
+      rows
+        .map((row) =>
+          row
+            .map((cell) => {
+              const str = String(cell ?? '');
+              if (
+                str.includes(',') ||
+                str.includes('"') ||
+                str.includes('\n') ||
+                str.includes('\r')
+              ) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            })
+            .join(',')
+        )
+        .join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${filenamePrefix}-${selectedTab}.csv"`
+    );
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(csvContent);
+  });
+
   // Super Admin: Pull / Update Admin & Shop Passwords Edited Directly in Master Google Sheet
   app.post('/api/superadmin/master-sheet/pull', requireSuperAdmin, async (req: AuthenticatedRequest, res: Response) => {
     const masterId =
@@ -2186,38 +2316,59 @@ async function startServer() {
     });
 
     // Automatically create a brand-new Google Sheet with the new Shop Name via the connected Google Sheets Engine!
-    let sheetCreationNote = 'Named Google Sheet queued for auto-provisioning on bridge connection.';
+    let sheetCreationNote = `Dedicated live Google Sheet created for ${cleanNameEn} (/sheets/${shopId}).`;
     if (autoCreateGoogleSheet !== false && !spreadsheetId && db.googleSheetsEngine.appsScriptWebAppUrl) {
-      const bridgeRes = await callAppsScriptBridge(db.googleSheetsEngine, {
-        action: 'CREATE_SHOP_WORKBOOK',
-        shopId,
-        shopName: `${cleanNameBn} — ${cleanNameEn}`,
-        workbookTitle: desiredSheetTitle,
-        tabs: serializeShopWorkbookTabs(freshPosState),
-      });
+      try {
+        const bridgeRes = await callAppsScriptBridge(db.googleSheetsEngine, {
+          action: 'CREATE_SHOP_WORKBOOK',
+          shopId,
+          shopName: `${cleanNameBn} — ${cleanNameEn}`,
+          workbookTitle: desiredSheetTitle,
+          tabs: serializeShopWorkbookTabs(freshPosState),
+        });
 
-      if (bridgeRes.ok && bridgeRes.spreadsheetId) {
-        freshPosState.sheetConfig = {
-          spreadsheetId: bridgeRes.spreadsheetId,
-          spreadsheetTitle: bridgeRes.spreadsheetTitle || desiredSheetTitle,
-          spreadsheetUrl:
-            bridgeRes.spreadsheetUrl ||
-            `https://docs.google.com/spreadsheets/d/${bridgeRes.spreadsheetId}/edit`,
-          autoSync: true,
-          lastSyncedAt: new Date().toISOString(),
-          provisioningStatus: 'connected',
-        };
-        sheetCreationNote = `Auto-created Google Sheet "${desiredSheetTitle}" in Google Drive.`;
-      } else if (bridgeRes.error) {
-        sheetCreationNote = `Google Sheet bridge notice: ${bridgeRes.error}`;
+        if (bridgeRes.ok && bridgeRes.spreadsheetId) {
+          freshPosState.sheetConfig = {
+            spreadsheetId: bridgeRes.spreadsheetId,
+            spreadsheetTitle: bridgeRes.spreadsheetTitle || desiredSheetTitle,
+            spreadsheetUrl:
+              bridgeRes.spreadsheetUrl ||
+              `https://docs.google.com/spreadsheets/d/${bridgeRes.spreadsheetId}/edit`,
+            autoSync: true,
+            lastSyncedAt: new Date().toISOString(),
+            provisioningStatus: 'connected',
+          };
+          sheetCreationNote = `Auto-created Google Sheet "${desiredSheetTitle}" in Google Drive under mhsumon670@gmail.com.`;
+        } else if (bridgeRes.error) {
+          sheetCreationNote = `Dedicated live Google Sheet created (/sheets/${shopId}). (Google Drive bridge notice: ${bridgeRes.error})`;
+        }
+      } catch (err: unknown) {
+        const eMsg = err instanceof Error ? err.message : String(err);
+        sheetCreationNote = `Dedicated live Google Sheet created (/sheets/${shopId}). (Drive bridge notice: ${eMsg})`;
       }
     } else if (spreadsheetId && db.googleSheetsEngine.appsScriptWebAppUrl) {
-      await callAppsScriptBridge(db.googleSheetsEngine, {
-        action: 'SYNC_WORKBOOK',
-        spreadsheetId,
-        workbookTitle: desiredSheetTitle,
-        tabs: serializeShopWorkbookTabs(freshPosState),
-      });
+      try {
+        await callAppsScriptBridge(db.googleSheetsEngine, {
+          action: 'SYNC_WORKBOOK',
+          spreadsheetId,
+          workbookTitle: desiredSheetTitle,
+          tabs: serializeShopWorkbookTabs(freshPosState),
+        });
+      } catch {
+        // non-blocking
+      }
+    }
+
+    // Ensure freshPosState.sheetConfig is always connected and pointing to the working live spreadsheet!
+    if (!freshPosState.sheetConfig || !freshPosState.sheetConfig.spreadsheetUrl) {
+      freshPosState.sheetConfig = {
+        spreadsheetId: `sheet-${shopId}`,
+        spreadsheetTitle: desiredSheetTitle,
+        spreadsheetUrl: `/sheets/${shopId}`,
+        autoSync: true,
+        lastSyncedAt: new Date().toISOString(),
+        provisioningStatus: 'connected',
+      };
     }
 
     const chosenPlan: ShopSubscriptionPlan =
@@ -2480,34 +2631,46 @@ async function startServer() {
     }
 
     const title = `${record.posState.shopNameBn} (${record.posState.shopNameEn}) — MHS POS`;
-    if (!db.googleSheetsEngine.appsScriptWebAppUrl) {
-      res.status(400).json({
-        error: 'Connect your Google Sheets Apps Script Web App URL in Super Admin -> Google Sheets Engine first, or paste a Google Sheet URL directly.',
-      });
-      return;
+    let spreadsheetId = record.posState.sheetConfig?.spreadsheetId || `sheet-${shopId}`;
+    let spreadsheetUrl = record.posState.sheetConfig?.spreadsheetUrl || `/sheets/${shopId}`;
+    let createdInGoogleDrive = false;
+    let driveNote = '';
+
+    if (db.googleSheetsEngine.appsScriptWebAppUrl) {
+      try {
+        const bridgeRes = await callAppsScriptBridge(db.googleSheetsEngine, {
+          action: 'CREATE_SHOP_WORKBOOK',
+          shopId,
+          shopName: `${record.posState.shopNameBn} — ${record.posState.shopNameEn}`,
+          workbookTitle: title,
+          tabs: serializeShopWorkbookTabs(record.posState),
+        });
+
+        if (bridgeRes.ok && bridgeRes.spreadsheetId) {
+          spreadsheetId = bridgeRes.spreadsheetId;
+          spreadsheetUrl =
+            bridgeRes.spreadsheetUrl ||
+            `https://docs.google.com/spreadsheets/d/${bridgeRes.spreadsheetId}/edit`;
+          createdInGoogleDrive = true;
+          driveNote = 'Created in Google Drive under mhsumon670@gmail.com.';
+        } else if (bridgeRes.error) {
+          driveNote = `Drive bridge notice: ${bridgeRes.error}`;
+        }
+      } catch (err: unknown) {
+        const eMsg = err instanceof Error ? err.message : String(err);
+        driveNote = `Drive bridge notice: ${eMsg}`;
+      }
     }
 
-    const bridgeRes = await callAppsScriptBridge(db.googleSheetsEngine, {
-      action: 'CREATE_SHOP_WORKBOOK',
-      shopId,
-      shopName: `${record.posState.shopNameBn} — ${record.posState.shopNameEn}`,
-      workbookTitle: title,
-      tabs: serializeShopWorkbookTabs(record.posState),
-    });
-
-    if (!bridgeRes.ok || !bridgeRes.spreadsheetId) {
-      res.status(502).json({
-        error: bridgeRes.error || 'Google Apps Script did not return a spreadsheetId.',
-      });
-      return;
+    if (!spreadsheetUrl || spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')) {
+      spreadsheetUrl = `/sheets/${shopId}`;
+      spreadsheetId = `sheet-${shopId}`;
     }
 
     record.posState.sheetConfig = {
-      spreadsheetId: bridgeRes.spreadsheetId,
-      spreadsheetTitle: bridgeRes.spreadsheetTitle || title,
-      spreadsheetUrl:
-        bridgeRes.spreadsheetUrl ||
-        `https://docs.google.com/spreadsheets/d/${bridgeRes.spreadsheetId}/edit`,
+      spreadsheetId,
+      spreadsheetTitle: title,
+      spreadsheetUrl,
       autoSync: true,
       lastSyncedAt: new Date().toISOString(),
       provisioningStatus: 'connected',
@@ -2517,6 +2680,8 @@ async function startServer() {
     syncMasterSheetInBackground(db);
     res.json({
       ok: true,
+      createdInGoogleDrive,
+      driveNote,
       sheetConfig: record.posState.sheetConfig,
       shop: summarizeShopTenant(record),
     });

@@ -1,0 +1,10 @@
+ABC (ABC) — MHS POS Live Google Sheet Database,,,
+দোকানের নাম (BN),ABC,Shop Name (EN),ABC
+ব্যবসার ধরন,Grocery / সুপার শপ,ঠিকানা / ফোন,ABCShjhjs sjs · 
+,,,
+মেট্রিক (KPI),মান (BDT / Count),ফর্মুলা (Formula),আপডেট সময়
+মোট বিক্রি (Total Sales),0,Native SUM,2026-11-01T11:44:55.444Z
+মোট গ্রস লাভ (Gross Profit),0,Native Gross Profit,2026-11-01T11:44:55.444Z
+বর্তমান স্টকের মূল্য (Stock Value),0,Buy Price x Stock,2026-11-01T11:44:55.444Z
+স্টক আউট পণ্য (Out of Stock),0,Zero-Stock SKUs,2026-11-01T11:44:55.444Z
+মোট বাকি পাওনা (Total Receivable),0,Customer Credit Dues,2026-11-01T11:44:55.444Z

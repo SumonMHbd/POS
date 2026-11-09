@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
+import { StandaloneGoogleSheetView } from './components/StandaloneGoogleSheetView';
 import './index.css';
 import { initAppSecurityShield } from './lib/appSecurity';
 
@@ -71,8 +72,55 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
+function resolveStandaloneSheetTarget(): string | null {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname;
+  const search = window.location.search;
+  if (path.startsWith('/sheets') || path.startsWith('/public/sheets')) {
+    const parts = path.split('/').filter(Boolean);
+    return parts[1] || 'shop-main';
+  }
+  const params = new URLSearchParams(search);
+  if (params.has('sheet') || params.has('view_sheet')) {
+    return params.get('sheet') || params.get('view_sheet') || 'shop-main';
+  }
+  return null;
+}
+
+function RootEntry() {
+  const [target, setTarget] = React.useState<string | null>(() => resolveStandaloneSheetTarget());
+
+  React.useEffect(() => {
+    const handleLocationChange = () => {
+      setTarget(resolveStandaloneSheetTarget());
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  if (target) {
+    return (
+      <StandaloneGoogleSheetView
+        target={target}
+        onBackToApp={() => {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = '/';
+          }
+        }}
+      />
+    );
+  }
+  return <App />;
+}
+
 createRoot(document.getElementById('root')!).render(
   <RootErrorBoundary>
-    <App />
+    <RootEntry />
   </RootErrorBoundary>
 );
