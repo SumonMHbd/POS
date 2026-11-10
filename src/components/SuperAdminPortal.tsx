@@ -957,11 +957,24 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   );
 
   const resolveAbsoluteSheetUrl = useCallback((rawUrl?: string, fallbackId: string = 'master'): string => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    if (!rawUrl) return `${origin}/sheets/${fallbackId}`;
-    if (rawUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')) {
-      return `${origin}/sheets/${fallbackId}`;
+    const REAL_DEFAULT = 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
+    if (!rawUrl) return REAL_DEFAULT;
+    if (
+      rawUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') ||
+      rawUrl === '/sheets/master' ||
+      rawUrl === '/sheets/shop-main' ||
+      rawUrl.startsWith('/sheets') ||
+      rawUrl.includes('/copy?')
+    ) {
+      return REAL_DEFAULT;
     }
+    if (rawUrl.startsWith('https://docs.google.com/spreadsheets')) {
+      return rawUrl;
+    }
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     if (rawUrl.startsWith('/')) {
       return `${origin}${rawUrl}`;
     }
@@ -969,7 +982,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   }, []);
 
   const masterSheetUrl = useMemo(() => {
-    const raw = overview?.googleSheetsEngine?.masterDirectorySheetUrl || '/sheets/master';
+    const raw = overview?.googleSheetsEngine?.masterDirectorySheetUrl || 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
     return resolveAbsoluteSheetUrl(raw, 'master');
   }, [overview?.googleSheetsEngine?.masterDirectorySheetUrl, resolveAbsoluteSheetUrl]);
   const isSheetsConnected = Boolean(masterSheetUrl);
@@ -1870,6 +1883,49 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                               </button>
                               <button
                                 type="button"
+                                onClick={() => {
+                                  const inv = overview.invoices.find((i) => i.shopId === shop.shopId);
+                                  if (inv) {
+                                    downloadSubscriptionInvoicePdf({
+                                      invoice: inv,
+                                      shop,
+                                      superAdminEmail: overview.superAdminProfile.email,
+                                    });
+                                  } else {
+                                    const now = new Date();
+                                    const currentMonthKey = now.toISOString().slice(0, 7);
+                                    const virtualInv: SubscriptionInvoiceRecord = {
+                                      id: `inv-${shop.shopId}-${currentMonthKey}`,
+                                      receiptNo: `RCP-${currentMonthKey.replace('-', '')}-${shop.shopId.slice(-4).toUpperCase()}`,
+                                      monthKey: currentMonthKey,
+                                      shopId: shop.shopId,
+                                      shopNameBn: shop.shopNameBn,
+                                      shopNameEn: shop.shopNameEn,
+                                      ownerEmail: shop.ownerEmail,
+                                      plan: shop.plan,
+                                      amount: shop.monthlySubscriptionFee,
+                                      status: shop.billingStatus,
+                                      dueDate: shop.nextBillingDate || `${currentMonthKey}-28`,
+                                      paidAt: shop.billingStatus === 'Paid' ? now.toISOString() : null,
+                                      paymentMethod: 'Cash / MFS',
+                                      note: 'Monthly subscription fee',
+                                    };
+                                    downloadSubscriptionInvoicePdf({
+                                      invoice: virtualInv,
+                                      shop,
+                                      superAdminEmail: overview.superAdminProfile.email,
+                                    });
+                                  }
+                                  onNotify(lang === 'bn' ? 'সাবস্ক্রিপশন ইনভয়েস PDF ডাউনলোড হচ্ছে...' : 'Downloading subscription invoice PDF...');
+                                }}
+                                className={`min-h-[30px] inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-semibold whitespace-nowrap text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/70 dark:bg-emerald-950/30 hover:bg-emerald-100 ${NEU_TINT_BTN}`}
+                                title={lang === 'bn' ? 'দোকানের সাবস্ক্রিপশন ইনভয়েস PDF ডাউনলোড' : 'Download Shop Subscription Invoice PDF'}
+                              >
+                                <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>PDF</span>
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => openEditShopModal(shop)}
                                 className={`min-h-[30px] p-1.5 rounded-xl ${NEU_SURFACE_BTN}`}
                                 title="Edit Shop & Monthly Fee"
@@ -2136,6 +2192,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                   .trim()
                   .charAt(0)
                   .toUpperCase();
+                const resolvedShopSheetUrl = resolveAbsoluteSheetUrl(shop.sheetConfig.spreadsheetUrl, shop.shopId);
 
                 return (
                   <div
@@ -2163,13 +2220,13 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                           >
                             · {shop.status}
                           </span>
-                          {shop.sheetConfig.spreadsheetUrl ? (
+                          {resolvedShopSheetUrl ? (
                             <a
-                              href={shop.sheetConfig.spreadsheetUrl}
+                              href={resolvedShopSheetUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
-                              title={shop.sheetConfig.spreadsheetUrl}
+                              title={resolvedShopSheetUrl}
                             >
                               <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                               <span>Google Sheet ↗</span>
@@ -2214,37 +2271,53 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
                         <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
                           <span className="font-semibold text-slate-500 text-[11px]">Google Sheet:</span>
-                          {shop.sheetConfig.spreadsheetUrl ? (
+                          {resolvedShopSheetUrl ? (
                             <div className="inline-flex items-center gap-1.5 flex-wrap">
                               <a
-                                href={shop.sheetConfig.spreadsheetUrl}
+                                href={resolvedShopSheetUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
-                                title={shop.sheetConfig.spreadsheetUrl}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:underline shadow-2xs"
+                                title={resolvedShopSheetUrl}
                               >
                                 <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                <span className="truncate max-w-[180px]">
+                                <span className="truncate max-w-[190px]">
                                   {shop.sheetConfig.spreadsheetTitle || `${shop.shopNameEn} Sheet`}
                                 </span>
                                 <ExternalLink className="h-3 w-3 shrink-0" />
                               </a>
+                              <a
+                                href={resolvedShopSheetUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+                                title={resolvedShopSheetUrl}
+                              >
+                                docs.google.com ↗
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(resolvedShopSheetUrl);
+                                  onNotify(
+                                    lang === 'bn'
+                                      ? 'গুগল শিট লিংক কপি হয়েছে!'
+                                      : 'Google Sheet link copied to clipboard!'
+                                  );
+                                }}
+                                className="text-[10px] text-slate-500 hover:text-emerald-600 cursor-pointer font-semibold px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700"
+                                title="Copy Google Sheet Link"
+                              >
+                                {lang === 'bn' ? 'কপি' : 'Copy'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleOpenLiveSheetViewer(shop.shopId, 'Products_Inventory')}
                                 className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer whitespace-nowrap inline-flex items-center gap-0.5 text-[10px]"
-                                title={lang === 'bn' ? 'দোকানের আসল ১৬টি পণ্য ও বিক্রির ডাটা দেখুন' : 'View shop actual 16 products & sales records'}
+                                title={lang === 'bn' ? 'দোকানের আসল ডাটা ভিউয়ার' : 'View shop live database records'}
                               >
                                 <FileSpreadsheet className="h-2.5 w-2.5" />
                                 <span>{lang === 'bn' ? 'ডাটা 📊' : 'Data 📊'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyShopDataForGoogleSheet(shop.shopId, shop.shopNameEn || shop.shopNameBn)}
-                                className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-semibold"
-                                title="Copy 16 products & sales for Google Sheets"
-                              >
-                                {lang === 'bn' ? 'কপি' : 'Copy'}
                               </button>
                               <button
                                 type="button"
@@ -2252,9 +2325,9 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
                                   setEditingShopSheet({
                                     shopId: shop.shopId,
                                     shopName: shop.shopNameEn || shop.shopNameBn,
-                                    currentUrl: shop.sheetConfig.spreadsheetUrl || '',
+                                    currentUrl: resolvedShopSheetUrl || '',
                                   });
-                                  setEditShopSheetInput(shop.sheetConfig.spreadsheetUrl || '');
+                                  setEditShopSheetInput(resolvedShopSheetUrl || '');
                                 }}
                                 className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer inline-flex items-center gap-0.5"
                                 title="Edit / paste Google Sheet URL"
@@ -2735,7 +2808,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
 
                       {overview.googleSheetsEngine.masterDirectorySheetUrl && (
                         <a
-                          href={overview.googleSheetsEngine.masterDirectorySheetUrl}
+                          href={resolveAbsoluteSheetUrl(overview.googleSheetsEngine.masterDirectorySheetUrl, 'master')}
                           target="_blank"
                           rel="noreferrer"
                           className={`inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 shrink-0 ${NEU_TINT_BTN}`}

@@ -262,8 +262,8 @@ async function createSeededStaticDb(): Promise<StaticPlatformDatabase> {
     googleSheetsEngine: {
       appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
       sharedSecret: 'mhs_secure_vault_token_2026',
-      masterDirectorySheetUrl: '/sheets/master',
-      masterSpreadsheetId: 'mhs-master-platform-vault',
+      masterDirectorySheetUrl: 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
+      masterSpreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
       masterSpreadsheetTitle: 'MHS POS Master Directory & Super Admin Vault',
       autoCreateSheetForNewShop: true,
       lastConnectedAt: new Date().toISOString(),
@@ -671,10 +671,10 @@ export async function handleStaticHostApiRequest<T>(
       ownerId,
       ownerName: String(body.ownerName || 'Shop Owner'),
       ownerEmail,
-      spreadsheetId: customSheetId || `sheet-${shopId}`,
+      spreadsheetId: customSheetId || '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
       spreadsheetUrl: customSheetId
         ? `https://docs.google.com/spreadsheets/d/${customSheetId}/edit`
-        : `/sheets/${shopId}`,
+        : 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
       provisioningStatus: 'connected',
       receiptFormat: body.receiptFormat === 'a4_invoice' ? 'a4_invoice' : 'pos_thermal',
     });
@@ -783,10 +783,11 @@ export async function handleStaticHostApiRequest<T>(
           } as T;
         }
       }
+      const fallbackShopTitle = `${rec.posState.shopNameEn || rec.posState.shopNameBn} — MHS POS`;
       rec.posState.sheetConfig = {
-        spreadsheetId: `sheet-${shopId}`,
-        spreadsheetTitle: `${rec.posState.shopNameEn || rec.posState.shopNameBn} — MHS POS`,
-        spreadsheetUrl: `/sheets/${shopId}`,
+        spreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
+        spreadsheetTitle: fallbackShopTitle,
+        spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
         autoSync: true,
         lastSyncedAt: new Date().toISOString(),
         provisioningStatus: 'connected',

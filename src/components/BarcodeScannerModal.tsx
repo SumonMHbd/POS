@@ -398,6 +398,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           border-radius: 0.75rem !important;
           margin: 0 !important;
           padding: 0 !important;
+          border: none !important;
         }
         #barcode-scanner-view__scan_region {
           position: relative !important;
@@ -425,21 +426,33 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           border-radius: 0.75rem !important;
           margin: 0 !important;
           padding: 0 !important;
+          display: block !important;
         }
         #barcode-scanner-view img,
         #barcode-scanner-view canvas,
+        #barcode-scanner-view a,
+        #barcode-scanner-view button,
+        #barcode-scanner-view select,
+        #barcode-scanner-view input,
+        #barcode-scanner-view span:not(.scanner-custom-label),
         #barcode-scanner-view__dashboard,
         #barcode-scanner-view__header_message,
         #barcode-scanner-view__status_span,
+        #barcode-scanner-view__dashboard_section,
         #barcode-scanner-view__dashboard_section_csr,
+        #barcode-scanner-view__dashboard_section_fsr,
         #barcode-scanner-view__dashboard_section_swaplink {
           display: none !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
       `}</style>
 
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[88vh] text-slate-100 animate-popup-modal"
+        className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh] text-slate-100 animate-popup-modal"
       >
         {/* Header */}
         <div className="shrink-0 px-4 py-3 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between gap-2">

@@ -201,10 +201,12 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
     auditLogs: [],
     seasonalHistory: buildEmptySeasonalHistory(year),
     sheetConfig: {
-      spreadsheetId: params.spreadsheetId || `sheet-${params.shopId}`,
+      spreadsheetId: params.spreadsheetId || '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
       spreadsheetTitle:
         params.spreadsheetTitle || `${params.shopNameBn} (${params.shopNameEn}) — MHS POS`,
-      spreadsheetUrl: params.spreadsheetUrl || `/sheets/${params.shopId}`,
+      spreadsheetUrl:
+        params.spreadsheetUrl ||
+        'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
       autoSync: true,
       lastSyncedAt: new Date().toISOString(),
       provisioningStatus: params.provisioningStatus || 'connected',
@@ -220,15 +222,17 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
   };
 }
 
-export const DEFAULT_MASTER_SHEET_URL = '/sheets/master';
-export const DEFAULT_MASTER_SPREADSHEET_ID = 'mhs-master-platform-vault';
+export const DEFAULT_MASTER_SPREADSHEET_ID = '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4';
+export const DEFAULT_MASTER_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
 export const DEFAULT_MASTER_SPREADSHEET_TITLE =
   'MHS POS Master Directory & Super Admin Vault';
 
 export const DEMO_SHOP_SHEET_CONFIG: SheetConnectionConfig = {
-  spreadsheetId: 'mhs-shop-main-demo-electronics',
+  spreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
   spreadsheetTitle: 'আমার ইলেকট্রনিকস শপ (My Electronics Shop) — MHS POS Storefront & Ledger',
-  spreadsheetUrl: '/sheets/shop-main',
+  spreadsheetUrl:
+    'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
   autoSync: true,
   lastSyncedAt: new Date().toISOString(),
   provisioningStatus: 'connected',
