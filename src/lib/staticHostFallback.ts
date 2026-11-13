@@ -262,8 +262,8 @@ async function createSeededStaticDb(): Promise<StaticPlatformDatabase> {
     googleSheetsEngine: {
       appsScriptWebAppUrl: 'https://script.google.com/macros/s/AKfycbx_mhs_pos_master_engine/exec',
       sharedSecret: 'mhs_secure_vault_token_2026',
-      masterDirectorySheetUrl: 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
-      masterSpreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
+      masterDirectorySheetUrl: 'https://docs.google.com/spreadsheets/d/1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ/edit?gid=647109661#gid=647109661',
+      masterSpreadsheetId: '1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ',
       masterSpreadsheetTitle: 'MHS POS Master Directory & Super Admin Vault',
       autoCreateSheetForNewShop: true,
       lastConnectedAt: new Date().toISOString(),
@@ -671,10 +671,12 @@ export async function handleStaticHostApiRequest<T>(
       ownerId,
       ownerName: String(body.ownerName || 'Shop Owner'),
       ownerEmail,
-      spreadsheetId: customSheetId || '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
+      spreadsheetId: customSheetId || `sheet-${shopId}`,
       spreadsheetUrl: customSheetId
         ? `https://docs.google.com/spreadsheets/d/${customSheetId}/edit`
-        : 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
+        : `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(
+            String(body.shopNameBn || body.shopNameEn || 'Shop') + ' — MHS POS'
+          )}`,
       provisioningStatus: 'connected',
       receiptFormat: body.receiptFormat === 'a4_invoice' ? 'a4_invoice' : 'pos_thermal',
     });
@@ -785,9 +787,9 @@ export async function handleStaticHostApiRequest<T>(
       }
       const fallbackShopTitle = `${rec.posState.shopNameEn || rec.posState.shopNameBn} — MHS POS`;
       rec.posState.sheetConfig = {
-        spreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
+        spreadsheetId: `sheet-${rec.shopId}`,
         spreadsheetTitle: fallbackShopTitle,
-        spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
+        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(fallbackShopTitle)}`,
         autoSync: true,
         lastSyncedAt: new Date().toISOString(),
         provisioningStatus: 'connected',

@@ -957,16 +957,20 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   );
 
   const resolveAbsoluteSheetUrl = useCallback((rawUrl?: string, fallbackId: string = 'master'): string => {
-    const REAL_DEFAULT = 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
-    if (!rawUrl) return REAL_DEFAULT;
+    const MASTER_URL = 'https://docs.google.com/spreadsheets/d/1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ/edit?gid=647109661#gid=647109661';
+    const DEMO_SHOP_URL = 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=844029548#gid=844029548';
+
+    if (!rawUrl) {
+      return fallbackId === 'shop-main' ? DEMO_SHOP_URL : MASTER_URL;
+    }
     if (
       rawUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') ||
-      rawUrl === '/sheets/master' ||
-      rawUrl === '/sheets/shop-main' ||
-      rawUrl.startsWith('/sheets') ||
-      rawUrl.includes('/copy?')
+      rawUrl === '/sheets/master'
     ) {
-      return REAL_DEFAULT;
+      return MASTER_URL;
+    }
+    if (rawUrl === '/sheets/shop-main' || (fallbackId === 'shop-main' && rawUrl.includes('gid=1102778112'))) {
+      return DEMO_SHOP_URL;
     }
     if (rawUrl.startsWith('https://docs.google.com/spreadsheets')) {
       return rawUrl;
@@ -982,7 +986,7 @@ export const SuperAdminPortal: React.FC<SuperAdminPortalProps> = ({
   }, []);
 
   const masterSheetUrl = useMemo(() => {
-    const raw = overview?.googleSheetsEngine?.masterDirectorySheetUrl || 'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
+    const raw = overview?.googleSheetsEngine?.masterDirectorySheetUrl || 'https://docs.google.com/spreadsheets/d/1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ/edit?gid=647109661#gid=647109661';
     return resolveAbsoluteSheetUrl(raw, 'master');
   }, [overview?.googleSheetsEngine?.masterDirectorySheetUrl, resolveAbsoluteSheetUrl]);
   const isSheetsConnected = Boolean(masterSheetUrl);

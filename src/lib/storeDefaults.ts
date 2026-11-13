@@ -201,12 +201,14 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
     auditLogs: [],
     seasonalHistory: buildEmptySeasonalHistory(year),
     sheetConfig: {
-      spreadsheetId: params.spreadsheetId || '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
+      spreadsheetId: params.spreadsheetId || `sheet-${params.shopId}`,
       spreadsheetTitle:
         params.spreadsheetTitle || `${params.shopNameBn} (${params.shopNameEn}) — MHS POS`,
       spreadsheetUrl:
         params.spreadsheetUrl ||
-        'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
+        `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(
+          `${params.shopNameBn} (${params.shopNameEn}) — MHS POS`
+        )}`,
       autoSync: true,
       lastSyncedAt: new Date().toISOString(),
       provisioningStatus: params.provisioningStatus || 'connected',
@@ -222,17 +224,21 @@ export function buildFreshShopStore(params: FreshShopStoreParams): PosStoreState
   };
 }
 
-export const DEFAULT_MASTER_SPREADSHEET_ID = '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4';
+export const DEFAULT_MASTER_SPREADSHEET_ID = '1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ';
 export const DEFAULT_MASTER_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112';
+  'https://docs.google.com/spreadsheets/d/1yO9SIziUyElqlxhHHlXHnRvzy0GocdP6Fad67AMBsUQ/edit?gid=647109661#gid=647109661';
 export const DEFAULT_MASTER_SPREADSHEET_TITLE =
   'MHS POS Master Directory & Super Admin Vault';
+
+export const DEMO_SHOP_SPREADSHEET_ID = '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4';
+export const DEMO_SHOP_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=844029548#gid=844029548';
 
 export const DEMO_SHOP_SHEET_CONFIG: SheetConnectionConfig = {
   spreadsheetId: '1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4',
   spreadsheetTitle: 'আমার ইলেকট্রনিকস শপ (My Electronics Shop) — MHS POS Storefront & Ledger',
   spreadsheetUrl:
-    'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=1102778112#gid=1102778112',
+    'https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/edit?gid=844029548#gid=844029548',
   autoSync: true,
   lastSyncedAt: new Date().toISOString(),
   provisioningStatus: 'connected',

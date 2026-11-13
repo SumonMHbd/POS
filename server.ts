@@ -39,6 +39,8 @@ import {
   DEMO_EXPENSES,
   DEMO_SEASONAL_HISTORY,
   DEMO_SHOP_SHEET_CONFIG,
+  DEMO_SHOP_SHEET_URL,
+  DEMO_SHOP_SPREADSHEET_ID,
   buildDefaultPosStore,
   buildFreshShopStore,
   ensureCustomerCreditHistory,
@@ -795,7 +797,8 @@ function loadDatabase(): PlatformDatabase {
           !parsed.googleSheetsEngine.masterDirectorySheetUrl ||
           !parsed.googleSheetsEngine.masterDirectorySheetUrl.trim() ||
           parsed.googleSheetsEngine.masterDirectorySheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') ||
-          parsed.googleSheetsEngine.masterDirectorySheetUrl.startsWith('/sheets')
+          parsed.googleSheetsEngine.masterDirectorySheetUrl.startsWith('/sheets') ||
+          parsed.googleSheetsEngine.masterSpreadsheetId !== DEFAULT_MASTER_SPREADSHEET_ID
         ) {
           parsed.googleSheetsEngine.masterDirectorySheetUrl = DEFAULT_MASTER_SHEET_URL;
           parsed.googleSheetsEngine.masterSpreadsheetId = DEFAULT_MASTER_SPREADSHEET_ID;
@@ -847,7 +850,7 @@ function loadDatabase(): PlatformDatabase {
         for (const [sId, sRecord] of Object.entries(parsed.shops)) {
           if (sRecord && sRecord.posState) {
             if (sId === 'shop-main') {
-              if (sRecord.posState.sheetConfig.spreadsheetUrl !== DEFAULT_MASTER_SHEET_URL) {
+              if (sRecord.posState.sheetConfig.spreadsheetUrl !== DEMO_SHOP_SHEET_URL) {
                 sRecord.posState.sheetConfig = { ...DEMO_SHOP_SHEET_CONFIG };
                 migrated = true;
               }
@@ -855,14 +858,13 @@ function loadDatabase(): PlatformDatabase {
               !sRecord.posState.sheetConfig ||
               !sRecord.posState.sheetConfig.spreadsheetUrl ||
               sRecord.posState.sheetConfig.spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') ||
-              sRecord.posState.sheetConfig.spreadsheetUrl.startsWith('/sheets') ||
-              sRecord.posState.sheetConfig.spreadsheetUrl.includes('/copy?')
+              sRecord.posState.sheetConfig.spreadsheetUrl.startsWith('/sheets')
             ) {
               const shopTitle = `${sRecord.posState.shopNameBn || sRecord.posState.shopNameEn || 'Shop'} — MHS POS`;
               sRecord.posState.sheetConfig = {
-                spreadsheetId: DEFAULT_MASTER_SPREADSHEET_ID,
+                spreadsheetId: `sheet-${sId}`,
                 spreadsheetTitle: shopTitle,
-                spreadsheetUrl: DEFAULT_MASTER_SHEET_URL,
+                spreadsheetUrl: `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(shopTitle)}`,
                 autoSync: true,
                 lastSyncedAt: new Date().toISOString(),
                 provisioningStatus: 'connected',
@@ -2325,7 +2327,7 @@ async function startServer() {
       provisioningStatus,
     });
 
-    const defaultGoogleSheetUrl = DEFAULT_MASTER_SHEET_URL;
+    const defaultGoogleSheetUrl = `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(desiredSheetTitle)}`;
 
     // Automatically create a brand-new Google Sheet with the new Shop Name via the connected Google Sheets Engine!
     let sheetCreationNote = `Google Sheet named "${desiredSheetTitle}" automatically linked.`;
@@ -2374,7 +2376,7 @@ async function startServer() {
     // Ensure freshPosState.sheetConfig is always connected and pointing to the authentic Google Sheet!
     if (!freshPosState.sheetConfig || !freshPosState.sheetConfig.spreadsheetUrl || freshPosState.sheetConfig.spreadsheetUrl.startsWith('/sheets')) {
       freshPosState.sheetConfig = {
-        spreadsheetId: DEFAULT_MASTER_SPREADSHEET_ID,
+        spreadsheetId: `sheet-${shopId}`,
         spreadsheetTitle: desiredSheetTitle,
         spreadsheetUrl: defaultGoogleSheetUrl,
         autoSync: true,
@@ -2674,9 +2676,12 @@ async function startServer() {
       }
     }
 
-    if (!spreadsheetUrl || spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') || spreadsheetUrl.startsWith('/sheets') || spreadsheetUrl.includes('/copy?')) {
-      spreadsheetUrl = DEFAULT_MASTER_SHEET_URL;
-      spreadsheetId = DEFAULT_MASTER_SPREADSHEET_ID;
+    if (shopId === 'shop-main') {
+      spreadsheetUrl = DEMO_SHOP_SHEET_URL;
+      spreadsheetId = DEMO_SHOP_SPREADSHEET_ID;
+    } else if (!createdInGoogleDrive && (!spreadsheetUrl || spreadsheetUrl.includes('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms') || spreadsheetUrl.startsWith('/sheets'))) {
+      spreadsheetUrl = `https://docs.google.com/spreadsheets/d/1h5JWlK3MDgVIne1YwImt631SNq1tT0e3hOntPugJPe4/copy?title=${encodeURIComponent(title)}`;
+      spreadsheetId = `sheet-${shopId}`;
     }
 
     record.posState.sheetConfig = {
