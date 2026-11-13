@@ -1,0 +1,7 @@
+# Robots.txt for MHS POS
+# Target: https://sumonmhbd.github.io/POS/
+User-agent: *
+Allow: /
+
+# Sitemap Index
+Sitemap: https://sumonmhbd.github.io/POS/sitemap.xml
